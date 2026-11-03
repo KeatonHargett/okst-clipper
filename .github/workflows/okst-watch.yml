@@ -1,0 +1,32 @@
+name: okst-watch
+# Every 2 hours, 9 am to midnight Central (14:00 to 06:00 UTC): look for new interviews and queue a clip run for each.
+on:
+  schedule:
+    - cron: "7 14-23/2,0-6/2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency: { group: okst-watch, cancel-in-progress: false }
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q -U "yt-dlp[default]"
+      - name: Find new interviews
+        id: find
+        run: |
+          python cloud/watch.py > new.txt
+          cat new.txt
+          echo "count=$(grep -c . new.txt || true)" >> "$GITHUB_OUTPUT"
+      - name: Save seen list
+        run: |
+          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
+          git add state/seen.json
+          git diff --cached --quiet || (git commit -q -m "watch: seen list" && git push -q)
+      - name: Queue clip runs
+        if: steps.find.outputs.count != '0'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: while read -r url; do gh workflow run okst-clip.yml -f url="$url"; done < new.txt

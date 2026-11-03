@@ -1,0 +1,39 @@
+{
+  "_about": "Instagram location tags for OKST posts. id is a Facebook Page ID that Instagram accepted as location_id (each one checked with an unpublished container on 2026-10-20). A post opts in with <base>.location.json = {\"key\": \"<venue key>\"}. Add a venue only after checking its id with: doppler run -p okst -c dev -- .venv\\Scripts\\python ig_publish.py --check-location <id>. Instagram rejects short ids and most new style profile ids; long place ids from Instagram place search (Apify apify/instagram-search-scraper, searchType place) usually pass.",
+  "venues": {
+    "boone-pickens-stadium": {"name": "Boone Pickens Stadium", "id": "145122445520730", "team": "Oklahoma State", "use_for": "OSU home football games, the stadium itself"},
+    "gallagher-iba-arena": {"name": "Gallagher-Iba Arena", "id": "147036921993137", "team": "Oklahoma State", "use_for": "OSU home basketball and wrestling"},
+    "obrate-stadium": {"name": "O'Brate Stadium", "id": "121055872626385", "team": "Oklahoma State", "use_for": "OSU home baseball"},
+    "oklahoma-state-university": {"name": "Oklahoma State University", "id": "133291994211867", "team": "Oklahoma State", "use_for": "campus spots without their own entry: Sherman Smith Training Center, Cowgirl Stadium, practice fields, OSU press rooms"},
+    "stillwater": {"name": "Stillwater, Oklahoma", "id": "1218466931519176", "team": "Oklahoma State", "use_for": "clearly Stillwater but no venue fits, e.g. the Strip, Eskimo Joe's, Karsten Creek"},
+
+    "folsom-field": {"name": "Folsom Field", "id": "164903056882808", "team": "Colorado"},
+    "tdecu-stadium": {"name": "TDECU Stadium", "id": "350513685097123", "team": "Houston"},
+    "mclane-stadium": {"name": "McLane Stadium", "id": "1444167325827662", "team": "Baylor"},
+    "david-booth-kansas-memorial-stadium": {"name": "David Booth Kansas Memorial Stadium", "id": "175306256615715", "team": "Kansas"},
+    "bill-snyder-family-stadium": {"name": "Bill Snyder Family Stadium", "id": "1921332331449053", "team": "Kansas State"},
+    "jones-att-stadium": {"name": "Jones AT&T Stadium", "id": "147986675866122", "team": "Texas Tech"},
+    "milan-puskar-stadium": {"name": "Milan Puskar Stadium", "id": "142852582413434", "team": "West Virginia"},
+    "mountain-america-stadium": {"name": "Mountain America Stadium", "id": "417645331431222", "team": "Arizona State"},
+    "arizona-stadium": {"name": "Arizona Stadium", "id": "126248674085418", "team": "Arizona"},
+    "acrisure-bounce-house": {"name": "Acrisure Bounce House", "id": "105199877992217", "team": "UCF"},
+    "rice-eccles-stadium": {"name": "Rice-Eccles Stadium", "id": "454812094657183", "team": "Utah"},
+
+    "boulder": {"name": "Boulder, Colorado", "id": "106083096088679", "team": "Colorado", "use_for": "away at Colorado, not the stadium"},
+    "houston": {"name": "Houston, Texas", "id": "115963528414384", "team": "Houston", "use_for": "away at Houston, not the stadium"},
+    "waco": {"name": "Waco, Texas", "id": "108401012517442", "team": "Baylor", "use_for": "away at Baylor, not the stadium"},
+    "lawrence": {"name": "Lawrence, Kansas", "id": "112577745421435", "team": "Kansas", "use_for": "away at Kansas, not the stadium"},
+    "manhattan-ks": {"name": "Manhattan, Kansas", "id": "105650906135705", "team": "Kansas State", "use_for": "away at Kansas State, not the stadium"},
+    "lubbock": {"name": "Lubbock, Texas", "id": "109820428848737", "team": "Texas Tech", "use_for": "away at Texas Tech, not the stadium"},
+    "morgantown": {"name": "Morgantown, West Virginia", "id": "108205955874066", "team": "West Virginia", "use_for": "away at West Virginia, not the stadium"},
+    "tempe": {"name": "Tempe, Arizona", "id": "112887355389124", "team": "Arizona State", "use_for": "away at Arizona State, not the stadium"},
+    "tucson": {"name": "Tucson, Arizona", "id": "109570449061083", "team": "Arizona", "use_for": "away at Arizona, not the stadium"},
+    "orlando": {"name": "Orlando, Florida", "id": "108288992526695", "team": "UCF", "use_for": "away at UCF, not the stadium"},
+    "salt-lake-city": {"name": "Salt Lake City, Utah", "id": "103649756337335", "team": "Utah", "use_for": "away at Utah, not the stadium"},
+    "provo": {"name": "Provo, Utah", "id": "106168308194151", "team": "BYU", "use_for": "anything at BYU, including LaVell Edwards Stadium (no stadium id Instagram accepts)"},
+    "ames": {"name": "Ames, Iowa", "id": "101238298536875", "team": "Iowa State", "use_for": "anything at Iowa State, including Jack Trice Stadium (no stadium id Instagram accepts)"},
+    "fort-worth": {"name": "Fort Worth, Texas", "id": "114148045261892", "team": "TCU", "use_for": "anything at TCU, including Amon G. Carter Stadium (no stadium id Instagram accepts)"},
+    "arlington": {"name": "Arlington, Texas", "id": "101827791204390", "team": "Big 12 Championship", "use_for": "AT&T Stadium, e.g. the Big 12 title game (no stadium id Instagram accepts)"}
+  },
+  "_missing": "Cincinnati (Nippert Stadium and the city): no id Instagram accepts yet, so Cincinnati posts go out without a location."
+}
