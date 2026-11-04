@@ -38,7 +38,7 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as f:
               f.write(f"CLEAN_URL={url}\n")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"url={url}\nplatform={platform}\nrepeat={'true' if seen else 'false'}\n")
+              f.write(f"url={url}\nplatform={platform}\nrepeat={'true' if (seen or platform == 'other') else 'false'}\n")
           print(url, platform, "REPEAT" if seen else "new")
           PY
       - name: Already posted
@@ -46,7 +46,9 @@ jobs:
         run: |
           mkdir -p out
           echo "Already reposted: $CLEAN_URL" > out/title.txt
-          printf '**Held:** this link is already in state/reposted.jsonl, so it was not posted again.\n\n%s\n' "$CLEAN_URL" > out/report.md
+          if [ "${{ steps.link.outputs.platform }}" = "other" ]; then msg="not a TikTok, Instagram, X, or YouTube link, so nothing ran (Shortcut test?)"; else msg="this link is already in state/reposted.jsonl, so it was not posted again"; fi
+          echo "Skipped: $CLEAN_URL" > out/title.txt
+          printf '**Held:** %s.\n\n%s\n' "$msg" "$CLEAN_URL" > out/report.md
       - uses: actions/setup-python@v5
         if: steps.link.outputs.repeat != 'true'
         with: { python-version: "3.12" }
