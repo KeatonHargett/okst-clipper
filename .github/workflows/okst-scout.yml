@@ -30,10 +30,7 @@ jobs:
           echo "Queued:"; cat queue.txt
           echo "count=$(grep -c . queue.txt || true)" >> "$GITHUB_OUTPUT"
       - name: Save seen list
-        run: |
-          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
-          git add state/scout-seen.json; [ -f state/pending.jsonl ] && git add state/pending.jsonl
-          git diff --cached --quiet || (git commit -q -m "scout: seen list" && git pull -q --rebase && git push -q)
+        run: python3 cloud/save_state.py "scout: seen list" state/scout-seen.json state/pending.jsonl
       - name: Queue repost runs
         if: steps.find.outputs.count != '0'
         env: { GH_TOKEN: "${{ github.token }}" }

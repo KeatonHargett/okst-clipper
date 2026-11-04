@@ -111,9 +111,5 @@ jobs:
           fi
       - name: Save the repost log
         if: always()
-        run: |
-          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
-          [ -f state/reposted.jsonl ] && git add state/reposted.jsonl
-          [ -f state/scout-skips.jsonl ] && git add state/scout-skips.jsonl
-          [ -f state/pending.jsonl ] && git add state/pending.jsonl
-          git diff --cached --quiet || (git commit -q -m "repost: $CLEAN_URL" && git pull -q --rebase && git push -q)
+        # Replays this run's lines on the latest main (parallel runs used to conflict here and fail).
+        run: python3 cloud/save_state.py "repost: $CLEAN_URL" state/reposted.jsonl state/scout-skips.jsonl state/pending.jsonl

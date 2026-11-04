@@ -22,10 +22,7 @@ jobs:
           cat new.txt
           echo "count=$(grep -c . new.txt || true)" >> "$GITHUB_OUTPUT"
       - name: Save seen list
-        run: |
-          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
-          git add state/seen.json
-          git diff --cached --quiet || (git commit -q -m "watch: seen list" && git push -q)
+        run: python3 cloud/save_state.py "watch: seen list" state/seen.json
       - name: Queue clip runs
         if: steps.find.outputs.count != '0'
         env: { GH_TOKEN: "${{ github.token }}" }
