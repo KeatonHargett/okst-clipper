@@ -63,7 +63,7 @@ jobs:
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-color-emoji >/dev/null
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
-          pip install -q -U "yt-dlp[default]" faster-whisper pillow pillow-heif numpy
+          pip install -q -U "yt-dlp[default,curl-cffi]" faster-whisper pillow pillow-heif numpy
           npm install -g -s @anthropic-ai/claude-code
           which google-chrome
       - name: Mask secrets and load the Claude token
