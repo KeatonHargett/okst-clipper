@@ -30,7 +30,8 @@ jobs:
           echo "Queued:"; cat queue.txt
           echo "count=$(grep -c . queue.txt || true)" >> "$GITHUB_OUTPUT"
       - name: Save seen list
-        run: python3 cloud/save_state.py "scout: seen list" state/scout-seen.json state/pending.jsonl
+        run: |
+          python3 cloud/save_state.py "scout: seen list" state/scout-seen.json state/pending.jsonl
       - name: Queue repost runs
         if: steps.find.outputs.count != '0'
         env: { GH_TOKEN: "${{ github.token }}" }

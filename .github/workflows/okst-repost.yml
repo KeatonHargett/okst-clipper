@@ -112,4 +112,5 @@ jobs:
       - name: Save the repost log
         if: always()
         # Replays this run's lines on the latest main (parallel runs used to conflict here and fail).
-        run: python3 cloud/save_state.py "repost: $CLEAN_URL" state/reposted.jsonl state/scout-skips.jsonl state/pending.jsonl
+        run: |
+          python3 cloud/save_state.py "repost: $CLEAN_URL" state/reposted.jsonl state/scout-skips.jsonl state/pending.jsonl

@@ -65,4 +65,5 @@ jobs:
           gh issue create --title "OKST: $title" --body-file out/report.md
       - name: Save post log and corrections
         if: always()
-        run: python3 cloud/save_state.py "clip: post log for ${{ inputs.url }}" state/posted-log.jsonl chopify/okst_clip.py
+        run: |
+          python3 cloud/save_state.py "clip: post log for ${{ inputs.url }}" state/posted-log.jsonl chopify/okst_clip.py

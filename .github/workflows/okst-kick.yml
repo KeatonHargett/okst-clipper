@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Restart the chain if it stopped
-        env: { GH_TOKEN: "${{ github.token }}", REPO: "${{ github.repository }}" }
+        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}", REPO: "${{ github.repository }}" }
         run: |
           active=0
           for s in queued in_progress; do
@@ -38,15 +38,15 @@ jobs:
     steps:
       - name: Queue the next kick run
         if: ${{ inputs.chain }}
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
         run: gh workflow run okst-kick.yml && echo "next kick run queued"
       - name: Start the scout every 30 minutes (7 am to 11 pm Central)
-        env: { GH_TOKEN: "${{ github.token }}" }
+        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
         run: |
           for i in $(seq 1 "${{ inputs.loops }}"); do
             h=$(TZ=America/Chicago date +%H)
             if [ "$((10#$h))" -ge 7 ] && [ "$((10#$h))" -le 23 ]; then
-              gh workflow run okst-scout.yml && echo "$(TZ=America/Chicago date +%H:%M) scout started"
+              if gh workflow run okst-scout.yml; then echo "$(TZ=America/Chicago date +%H:%M) scout started"; else echo "::warning::scout start failed"; fi
             else
               echo "$(TZ=America/Chicago date +%H:%M) quiet hours, skipped"
             fi

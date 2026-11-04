@@ -22,7 +22,8 @@ jobs:
           cat new.txt
           echo "count=$(grep -c . new.txt || true)" >> "$GITHUB_OUTPUT"
       - name: Save seen list
-        run: python3 cloud/save_state.py "watch: seen list" state/seen.json
+        run: |
+          python3 cloud/save_state.py "watch: seen list" state/seen.json
       - name: Queue clip runs
         if: steps.find.outputs.count != '0'
         env: { GH_TOKEN: "${{ github.token }}" }
