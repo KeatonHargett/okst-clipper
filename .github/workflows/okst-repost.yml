@@ -62,8 +62,7 @@ jobs:
       - name: Tools
         if: steps.link.outputs.repeat != 'true'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fonts-noto-color-emoji >/dev/null
+          bash cloud/apt_install.sh ffmpeg fonts-dejavu-core fonts-noto-color-emoji
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
           pip install -q -U "yt-dlp[default,curl-cffi]" faster-whisper pillow pillow-heif numpy
