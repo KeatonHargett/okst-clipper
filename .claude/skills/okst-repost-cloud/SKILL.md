@@ -1,7 +1,7 @@
 ---
 name: okst-repost-cloud
 description: Unattended cloud version of /okst-repost, run by the okst-repost GitHub Actions workflow when Keaton shares a link from his iPhone. Reposts the TikTok, Instagram, X, or YouTube post to Instagram @okstprobs and the OKSTProbs Facebook Page and writes a report for the GitHub issue.
-argument-hint: <url> [@handle] [hold]
+argument-hint: <url> [@handle] [hold] [auto]
 disable-model-invocation: true
 ---
 
@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 Input: $ARGUMENTS
 First token is the post URL (the workflow already stripped tracking parameters). Optional: `@handle` (the creator, overrides
-the info JSON), `hold` (make and stage everything, ship nothing).
+the info JSON), `hold` (make and stage everything, ship nothing), `auto` (found by okst-scout: see AUTO).
 
 You run alone on a GitHub Actions runner. Nobody can answer a question. Wherever the desktop /okst-repost would stop and ask,
 write the question into REPORT, ship nothing, and finish. Never wait. Sharing the link was Keaton's approval: ship without asking.
@@ -25,6 +25,25 @@ LOG: $GITHUB_WORKSPACE/state/reposted.jsonl (one JSON line per shipped post; the
 Already done by the workflow: the Doppler CLI is logged in (DOPPLER_TOKEN), ffmpeg, Chrome, yt-dlp and faster-whisper are
 installed, and for TikTok and YouTube links Cloudflare WARP is on (yt-dlp's config has --proxy). The workflow also skipped the
 run if LOG already has this URL. Never print a secret, never run `doppler secrets get` or `doppler secrets download`.
+
+## AUTO (the input has `auto`: okst-scout found this post, Keaton never saw it)
+Keaton approved auto posting of anything similar to what he reposts by hand. Before Step 1 (or C2), and again after you
+have looked at the frames, transcript, and caption, decide POST or SKIP:
+- POST when it is clearly Oklahoma State content an OSU fan would share, like his hand picked reposts:
+  creator highlight edits of OSU players (old or current: Dez Bryant throwbacks, Mestemaker film breakdowns), game day crowd
+  and stadium moments, fan reactions and celebrations, student media recaps (The Daily O'Collegian), player or recruit
+  features, draft and ranking talk about OSU players, OSU account posts and graphics, OSU women's and men's basketball,
+  wrestling, baseball, softball highlights. Creator edits that use broadcast clips are fine (his taste); flag them as usual.
+- SKIP when any is true: OSU is only a hashtag or a passing mention; mainly another team; mocks or trolls OSU or a player;
+  betting, gambling, giveaway, or brand or business promotion (restaurants, merch sales, sponsored posts); a full
+  network upload (an ESPN, FOX, CBS, NBC, ABC, or Big 12 channel's own video); minors shown as the focus (high school
+  recruits are fine when the post is about their OSU recruitment); fights, injuries as the subject, profanity on screen, or
+  anything political; blurry, broken, or no clear moment; no creator handle you can confirm; or @okstprobs already posted it
+  (run `doppler run -p okst -c dev -- python ../cloud/ig_recent.py 40` and skip if a recent caption credits this creator for
+  the same content).
+- When unsure, SKIP. A skipped post costs nothing; a bad post costs reach.
+On SKIP: write TITLE as `Skipped: @handle <one line reason>` (it must start with `Skipped`), write a short REPORT, ship
+nothing, and stop. On POST: continue exactly as below and add "auto": true to the LOG line. Never ask anything.
 
 ## Routing
 - Instagram: `doppler run -p okst -c dev -- python okst_carousel.py fetch "<URL>" [--handle @handle]`.

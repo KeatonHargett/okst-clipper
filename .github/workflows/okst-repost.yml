@@ -1,15 +1,17 @@
 name: okst-repost
-# Started by the "OKST Repost" iPhone Shortcut (share sheet) or Actions > okst-repost > Run workflow.
+# Started by the "Post to OKST" share sheet Shortcut, by okst-scout (auto=true), or Actions > okst-repost > Run workflow.
 on:
   workflow_dispatch:
     inputs:
       url: { description: "TikTok, Instagram, X, or YouTube link", required: true }
       handle: { description: "Creator @handle (optional)", required: false, default: "" }
       hold: { description: "Make it but do not post", type: boolean, default: false }
+      auto: { description: "Found by okst-scout: post only if it matches Keaton's taste, skip quietly otherwise", type: boolean, default: false }
 permissions:
   contents: write
   issues: write
-concurrency: { group: okst-repost, cancel-in-progress: false }
+# One group per link: different links run side by side (a shared group cancels queued runs past the first).
+concurrency: { group: "okst-repost-${{ inputs.url }}", cancel-in-progress: false }
 jobs:
   repost:
     runs-on: ubuntu-latest
@@ -45,7 +47,6 @@ jobs:
         if: steps.link.outputs.repeat == 'true'
         run: |
           mkdir -p out
-          echo "Already reposted: $CLEAN_URL" > out/title.txt
           if [ "${{ steps.link.outputs.platform }}" = "other" ]; then msg="not a TikTok, Instagram, X, or YouTube link, so nothing ran (Shortcut test?)"; else msg="this link is already in state/reposted.jsonl, so it was not posted again"; fi
           echo "Skipped: $CLEAN_URL" > out/title.txt
           printf '**Held:** %s.\n\n%s\n' "$msg" "$CLEAN_URL" > out/report.md
@@ -84,6 +85,7 @@ jobs:
           args="$CLEAN_URL"
           [ -n "$HANDLE" ] && args="$args @${HANDLE#@}"
           [ "${{ inputs.hold }}" = "true" ] && args="$args hold"
+          [ "${{ inputs.auto }}" = "true" ] && args="$args auto"
           claude -p "/okst-repost-cloud $args" \
             --permission-mode bypassPermissions --model claude-opus-5-5 \
             --output-format stream-json --verbose > out/claude.jsonl 2> out/claude.err || echo "claude exited $?"
@@ -100,10 +102,17 @@ jobs:
           [ -s out/report.md ] || echo "**No report written.** Check the run log." > out/report.md
           printf '\n\n[Run and files](%s/%s/actions/runs/%s)\n' "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" >> out/report.md
           title=$(head -n1 out/title.txt 2>/dev/null || true)
-          gh issue create --title "Repost: ${title:-$CLEAN_URL}" --body-file out/report.md
+          if [ "${{ inputs.auto }}" = "true" ] && [ "${title#Skipped}" != "$title" ]; then
+            # Auto runs that do not post stay quiet: one line in state/scout-skips.jsonl instead of an issue.
+            python3 -c "import json,sys,datetime;print(json.dumps({'date':datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M'),'url':sys.argv[1],'why':sys.argv[2]}))" "$CLEAN_URL" "$title" >> state/scout-skips.jsonl
+            echo "auto skip logged: $title"
+          else
+            gh issue create --title "Repost: ${title:-$CLEAN_URL}" --body-file out/report.md
+          fi
       - name: Save the repost log
         if: always()
         run: |
           git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
           [ -f state/reposted.jsonl ] && git add state/reposted.jsonl
+          [ -f state/scout-skips.jsonl ] && git add state/scout-skips.jsonl
           git diff --cached --quiet || (git commit -q -m "repost: $CLEAN_URL" && git pull -q --rebase && git push -q)

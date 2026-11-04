@@ -1,0 +1,40 @@
+name: okst-scout
+# Every 2 hours, 8 am to midnight Central: find new Oklahoma State posts on TikTok, Instagram, and YouTube
+# (cloud/scout.json lists the sources) and queue an okst-repost auto run for each. No daily cap.
+on:
+  schedule:
+    - cron: "37 13-23/2,1-5/2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency: { group: okst-scout, cancel-in-progress: false }
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: dopplerhq/cli-action@v3
+      - run: pip install -q -U "yt-dlp[default,curl-cffi]"
+      - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
+        run: bash cloud/setup_warp.sh
+      - name: Find new posts
+        id: find
+        run: |
+          doppler run -p okst -c dev -- python cloud/scout.py > queue.txt
+          echo "Queued:"; cat queue.txt
+          echo "count=$(grep -c . queue.txt || true)" >> "$GITHUB_OUTPUT"
+      - name: Save seen list
+        run: |
+          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
+          git add state/scout-seen.json
+          git diff --cached --quiet || (git commit -q -m "scout: seen list" && git pull -q --rebase && git push -q)
+      - name: Queue repost runs
+        if: steps.find.outputs.count != '0'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: while read -r url; do gh workflow run okst-repost.yml -f url="$url" -f auto=true; sleep 2; done < queue.txt

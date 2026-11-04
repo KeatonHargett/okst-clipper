@@ -1,0 +1,28 @@
+{
+  "_about": "Sources for cloud/scout.py. Add creators here to watch them. osu_only: every post is about OSU, so skip the keyword check.",
+  "tiktok": [
+    {"user": "velsports1"},
+    {"user": "legionoforange"},
+    {"user": "ak.tapes"},
+    {"user": "i_am_the_real_batman_guy"},
+    {"user": "cardzonlock"},
+    {"user": "kristiclark0214"},
+    {"user": "jack.beyer25"},
+    {"user": "cam.cfb"}
+  ],
+  "instagram": [
+    {"user": "jordansportsgroup"},
+    {"user": "collegefootball"},
+    {"user": "rookwatch"},
+    {"user": "alyssa_brandon_media"}
+  ],
+  "instagram_tags": true,
+  "youtube_queries": ["Oklahoma State Cowboys", "okstate", "Oklahoma State Cowgirls"],
+  "youtube_max_seconds": 90,
+  "youtube_skip_channels": ["ESPN", "FOX", "CBS", "NBC", "ABC", "Big 12 Conference", "Oklahoma State Athletics", "Bleacher Report"],
+  "block": ["underdogfantasy", "prizepicks", "draftkings", "fanduel", "okstprobs"],
+  "keywords": ["okstate", "ok state", "oklahoma state", "gopokes", "go pokes", "pokes", "cowboy football", "cowgirl", "stillwater",
+               "boone pickens", "gallagher", "pistol pete", "bedlam", "eric morris", "steve lutz", "jacie hoyt", "david taylor",
+               "mike gundy", "dez bryant", "barry sanders", "osu cowboys", "osu football"],
+  "max_age_hours": 48
+}
