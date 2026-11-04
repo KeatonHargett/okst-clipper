@@ -2,7 +2,7 @@ name: okst-watch
 # Every 2 hours, 9 am to midnight Central (14:00 to 06:00 UTC): look for new interviews and queue a clip run for each.
 on:
   schedule:
-    - cron: "7 14-23/2,0-6/2 * * *"
+    - cron: "9 14-23/2,0-6/2 * * *"
   workflow_dispatch:
 permissions:
   contents: write

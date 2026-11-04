@@ -1,9 +1,9 @@
 name: okst-scout
-# Every 2 hours, 8 am to midnight Central: find new Oklahoma State posts on TikTok, Instagram, and YouTube
+# Every 30 minutes, 7 am to midnight Central (GitHub drops or delays some scheduled runs, so run often): find new Oklahoma State posts on TikTok, Instagram, and YouTube
 # (cloud/scout.json lists the sources) and queue an okst-repost auto run for each. No daily cap.
 on:
   schedule:
-    - cron: "37 13-23/2,1-5/2 * * *"
+    - cron: "13,43 13-23,0-5 * * *"
   workflow_dispatch:
 permissions:
   contents: write
