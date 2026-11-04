@@ -23,6 +23,9 @@ Already done by the workflow before you start: YouTube goes through Cloudflare W
 video is at PROJECT/work/<video id>/source.mp4, OKST_FULL_SOURCE=1 makes okst_clip.py cut ranges from it, and the Doppler CLI
 is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets get` or `doppler secrets download`.
 
+"/okst-clip step N" means desktop-okst-clip.md in this folder (Keaton's desktop skill; its Windows paths, Drive folders, and
+.venv commands do not apply here). desktop-okst-ship.md holds the ship checks. Read both before step 2.
+
 ## Steps
 0. Guards (any failure: write the reason in REPORT and stop):
    a. Title and description: `python -m yt_dlp --skip-download --print "%(title)s|%(channel)s|%(upload_date)s" --print description "<URL>"`.
@@ -59,8 +62,12 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
    facts from the clip, title, or description, names spelled from the official roster). Hashtags: #OKState first, the opponent,
    the sport tag (#OKStateFootball, #OKStateMBB, #OKStateWBB, #OKStateWrestling, #OKStateBaseball, #OKStateSoftball), and tags
    that match the clip. Keep every .draft.txt.
-4b. Covers: `python make_cover.py "<OUT>/<base>.mp4" --color orange`, look at every cover, rerun with --text when one fails
-   (move the bad one to /tmp first, never overwrite).
+   Line 2 must be UNDER 12 words: count them, and cut the clause after "and" or "after" when it runs long
+   (e.g. "Taylor on Michael White's belief in himself." not "...unwavering belief after only four years of wrestling.").
+4b. Covers: always pass --text with a short line of at most 7 words, preferably the clip's most quotable phrase in the
+   speaker's own words (e.g. "Stillwater is very much a wrestling town", "Our guys need to wrestle in front of people"):
+   `python make_cover.py "<OUT>/<base>.mp4" --color orange --text "<short line>"`. Never put the full caption line 2 on a cover.
+   Look at every cover; rerun with a shorter --text when one fails (move the bad one to /tmp first, never overwrite).
 4c. Opening photo: football only, exactly as /okst-clip step 4c (game_photos.py, jersey number from the okstate.com roster,
    on field game photos only, never headshots, never guess who is in a photo). Every other sport: skip the intro and say so.
 5. Flags to OUT/review-flags.json as in /okst-clip step 5. Add a rights flag naming the highlights video to every split
