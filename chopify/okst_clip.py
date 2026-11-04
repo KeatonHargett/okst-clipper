@@ -111,6 +111,8 @@ CORRECTIONS = {
     "Deshawn Brown": "DeSean Brown",
     "Justin Bowie": "Justin Bowick",
     "Carson Cole": "Carson Kolb",
+    "Still Water": "Stillwater",
+    "Sar is": "Stillwater is",   # scoped: David Taylor, "Stillwater is a pretty small town" (xpIkWdBYqEE 6:44)
 }
 
 # Everything okst_clip uses from chopify. Checked at startup so a chopify
