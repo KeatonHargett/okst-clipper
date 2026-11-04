@@ -49,8 +49,8 @@ jobs:
           mkdir -p out
           claude -p "/okst-clip-cloud ${{ inputs.url }}${{ inputs.hold && ' hold' || '' }}" \
             --permission-mode bypassPermissions --model claude-opus-5-5 \
-            --output-format stream-json --verbose > out/claude.jsonl 2> out/claude.err || echo "claude exited $?"
-          python -c "import json;r=[json.loads(l) for l in open('out/claude.jsonl') if l.strip()];f=[x for x in r if x.get('type')=='result'];print(f[-1].get('result','')[:3000] if f else 'no result')"
+            --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || echo "claude exited $?"
+          python -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];f=[x for x in r if x.get('type')=='result'];print(f[-1].get('result','')[:3000] if f else 'no result')" "$RUNNER_TEMP/claude.jsonl"
       - name: Upload clips
         if: always()
         uses: actions/upload-artifact@v4
