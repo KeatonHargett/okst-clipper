@@ -154,15 +154,16 @@ def fb_wait_uploaded(video_id, token, timeout_s=600):
         time.sleep(5)
 
 
-def fb_upload(url, token, path, **params):
-    """multipart POST of one local file as `source`. Facebook gets the bytes straight from this PC, so its step
+def _fb_multipart(url, token, params, file_field=None, filename=None, data=None, label="upload"):
+    """multipart POST with optional file bytes. Facebook gets the bytes straight from this machine, so its step
     needs no tunnel (the Reels fetcher rejects trycloudflare URLs, and quick tunnels get rate limited)."""
     boundary = secrets.token_hex(16)
-    head = b"".join(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+    body = b"".join(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
                     for k, v in {**params, "access_token": token}.items())
-    head += (f'--{boundary}\r\nContent-Disposition: form-data; name="source"; filename="upload{path.suffix}"\r\n'
-             f"Content-Type: application/octet-stream\r\n\r\n").encode()
-    body = head + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+    if file_field:
+        body += (f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+                 f"Content-Type: application/octet-stream\r\n\r\n").encode() + data + b"\r\n"
+    body += f"--{boundary}--\r\n".encode()
     req = urllib.request.Request(url, data=body, method="POST",
                                  headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     try:
@@ -174,7 +175,40 @@ def fb_upload(url, token, path, **params):
             msg = f"{err.get('error_user_msg') or err.get('message')} (code {err.get('code')}/{err.get('error_subcode', '')})"
         except Exception:
             msg = f"HTTP {e.code}"
-        raise ApiError(f"POST fb upload {path.name}: {msg}") from None
+        raise ApiError(f"POST fb {label}: {msg}") from None
+
+
+FB_CHUNKED_MIN = 40 * 1024 * 1024   # one shot uploads of large files get dropped mid stream (SSL EOF); chunk them
+
+
+def fb_upload(url, token, path, **params):
+    """Upload one local video to a /videos endpoint: one multipart POST for small files, Facebook's resumable
+    start/transfer/finish chunks for large ones. Returns the response with "id"."""
+    size = path.stat().st_size
+    if size < FB_CHUNKED_MIN or not url.endswith("/videos"):   # photos never use the chunked API
+        return _fb_multipart(url, token, params, "source", f"upload{path.suffix}", path.read_bytes(), path.name)
+    start = _fb_multipart(url, token, {"upload_phase": "start", "file_size": size}, label="upload start")
+    session, vid = start["upload_session_id"], start["video_id"]
+    lo, hi = int(start["start_offset"]), int(start["end_offset"])
+    with open(path, "rb") as f:
+        while lo < hi:
+            f.seek(lo)
+            chunk = f.read(hi - lo)
+            for attempt in range(3):   # a dropped chunk is safe to resend: same session, same offset
+                try:
+                    r = _fb_multipart(url, token, {"upload_phase": "transfer", "upload_session_id": session,
+                                                   "start_offset": lo}, "video_file_chunk", "chunk", chunk,
+                                      f"upload chunk at {lo}")
+                    break
+                except (urllib.error.URLError, OSError) as e:
+                    if attempt == 2:
+                        raise ApiError(f"Facebook chunk at {lo} failed 3 times: {e}") from None
+                    time.sleep(5)
+            lo, hi = int(r["start_offset"]), int(r["end_offset"])
+            print(f"  Facebook upload {min(lo, size) * 100 // size}%")
+    _fb_multipart(url, token, {"upload_phase": "finish", "upload_session_id": session, **params},
+                  label="upload finish")
+    return {"id": vid}
 
 
 def fb_video(mp4, caption, info, token):
