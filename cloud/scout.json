@@ -2,7 +2,8 @@
   "_about": "Sources for cloud/scout.py. Add creators here to watch them. osu_only: every post is about OSU, so skip the keyword check.",
   "tiktok_hashtags": ["okstate", "gopokes", "okstatefootball", "oklahomastate", "okstatebasketball", "okstatewrestling", "okstatesoftball", "okstatebaseball"],
   "tiktok_min_views": 3000,
-  "tiktok": [
+  "_tiktok_off": "yt-dlp cannot list TikTok profiles (Failed to parse JSON) and the retries cost about 5 Actions minutes a run. Rename tiktok_off back to tiktok to try again.",
+  "tiktok_off": [
     {"user": "velsports1"},
     {"user": "legionoforange"},
     {"user": "ak.tapes"},
