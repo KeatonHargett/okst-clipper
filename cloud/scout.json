@@ -1,5 +1,7 @@
 {
   "_about": "Sources for cloud/scout.py. Add creators here to watch them. osu_only: every post is about OSU, so skip the keyword check.",
+  "tiktok_hashtags": ["okstate", "gopokes", "okstatefootball", "oklahomastate", "okstatebasketball", "okstatewrestling", "okstatesoftball", "okstatebaseball"],
+  "tiktok_min_views": 3000,
   "tiktok": [
     {"user": "velsports1"},
     {"user": "legionoforange"},
