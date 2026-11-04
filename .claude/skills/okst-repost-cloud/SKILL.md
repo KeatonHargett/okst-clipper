@@ -41,6 +41,13 @@ have looked at the frames, transcript, and caption, decide POST or SKIP:
   anything political; blurry, broken, or no clear moment; no creator handle you can confirm; or @okstprobs already posted it
   (run `doppler run -p okst -c dev -- python ../cloud/ig_recent.py 40` and skip if a recent caption credits this creator for
   the same content).
+- FORMER COWBOYS IN THE PROS: a post about a player listed under "pros" in $GITHUB_WORKSPACE/cloud/scout.json counts
+  as OSU content (former Cowboy or Cowgirl now in the NBA, NFL, MLB, or AUSL). These tags are busy, so be stricter:
+  POST only a standout moment (a big play, career high, milestone, award, playoff moment, or any mention of Oklahoma
+  State) that is clearly that player. SKIP routine clips, other players sharing the name, betting or fantasy posts,
+  and uploads by the league or team's own accounts (NBA, NFL, MLB, AUSL, team pages). In the caption, say they are a
+  former Cowboy (or Cowgirl) and name their pro team, e.g. "Former Cowboy Cade Cunningham drops 40 for the Pistons."
+  Hashtags: #OKState first, then the player, the pro team or league, and #GoPokes.
 - When unsure, SKIP. A skipped post costs nothing; a bad post costs reach.
 On SKIP: write TITLE as `Skipped: @handle <one line reason>` (it must start with `Skipped`), write a short REPORT, ship
 nothing, and stop. On POST: continue exactly as below and add "auto": true to the LOG line. Never ask anything.

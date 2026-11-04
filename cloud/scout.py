@@ -129,8 +129,10 @@ def ig_time(ts):
 def collect():
     # dicts: key, url, who, when (epoch or None), text, score, osu_only, src (source name), min_views (optional)
     cands = []
-    min_views = CFG.get("tiktok_min_views", 0)
-    for tag in CFG.get("tiktok_hashtags", []):
+    # OSU hashtags, then each former Cowboy now in the pros by name hashtag (busier tags, so a higher view bar)
+    tags = [(t, f"tt-tag:{t}", CFG.get("tiktok_min_views", 0)) for t in CFG.get("tiktok_hashtags", [])]
+    tags += [(p["tag"], f"tt-pro:{p['tag']}", CFG.get("pros_min_views", 25000)) for p in CFG.get("pros", [])]
+    for tag, src_name, min_views in tags:
         found = tikwm("challenge/search", keywords=tag, count=5).get("challenge_list") or []
         cid = next((c.get("id") for c in found if (c.get("cha_name") or "").lower() == tag.lower()), None)
         if not cid:
@@ -143,7 +145,7 @@ def collect():
                 continue
             cands.append({"key": f"tt:{vid}", "url": f"https://www.tiktok.com/@{user}/video/{vid}", "who": user,
                           "when": v.get("create_time"), "text": v.get("title") or "", "score": v.get("play_count") or 0,
-                          "osu_only": True, "src": f"tt-tag:{tag}", "min_views": min_views})
+                          "osu_only": True, "src": src_name, "min_views": min_views})
     for src in CFG.get("tiktok", []):
         user = src["user"]
         for v in ytdlp_json(f"https://www.tiktok.com/@{user}", "1:8"):
