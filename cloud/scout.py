@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "cloud" / "scout.json").read_text(encoding="utf-8"))
 SEEN_F = ROOT / "state" / "scout-seen.json"
 REPOSTED_F = ROOT / "state" / "reposted.jsonl"
+PENDING_F = ROOT / "state" / "pending.jsonl"   # links that hit Instagram's daily limit, shipped when room frees up
 IG_ID = "17841434949988123"   # @okstprobs
 NOW = time.time()
 MAX_AGE = CFG.get("max_age_hours", 48) * 3600
@@ -117,6 +118,16 @@ def graph(path, **params):
             msg = f"HTTP {e.code}"
         log(f"  Graph API error on {path.split('?')[0]}: {msg}")
         return {}
+
+
+def posts_left():
+    """Instagram API posts left in the rolling 24 hours. The API reports quota_total 100 but refuses at 50."""
+    d = graph(f"{IG_ID}/content_publishing_limit", fields="quota_usage,config")
+    row = (d.get("data") or [{}])[0]
+    if row.get("quota_usage") is None:
+        return None
+    total = min((row.get("config") or {}).get("quota_total") or 50, CFG.get("ig_daily_limit", 50))
+    return total - row["quota_usage"]
 
 
 def ig_time(ts):
@@ -223,11 +234,37 @@ def main():
             picks.append(c)
     for c in by_key.values():
         seen[f"src:{c['src']}"] = int(NOW)   # refreshed every run, so source markers never age out
+
+    # Instagram allows 50 API posts per rolling 24 hours. Keep a few for Keaton's own Shortcut posts; posts that do
+    # not fit stay unseen (picked up next run). Links that hit the limit wait in state/pending.jsonl and go first.
+    left = posts_left()
+    room = 10**6 if left is None else max(0, left - CFG.get("ig_keep_free", 2))
+    log(f"  Instagram posts left today: {left if left is not None else 'unknown'}; room for {min(room, 999)}")
+    pending = []
+    if PENDING_F.exists():
+        for line in PENDING_F.read_text(encoding="utf-8").splitlines():
+            try:
+                p = json.loads(line)
+            except ValueError:
+                continue
+            if p.get("url") and p["url"] not in posted and p["url"] not in [q["url"] for q in pending]:
+                pending.append(p)
+    out = []
+    for p in pending[:room]:
+        out.append((p["url"], "auto" if p.get("auto") else "manual"))
+        log(f"  QUEUE {p['url']} (waiting for the daily limit)")
+    PENDING_F.write_text("".join(json.dumps(p) + "\n" for p in pending[room:]), encoding="utf-8")
+    for c in sorted(picks, key=lambda c: -c["score"]):
+        if len(out) < room:
+            out.append((c["url"], "auto"))
+            log(f"  QUEUE {c['url']} (@{c['who']})")
+        else:
+            seen.pop(c["key"], None)
+            log(f"  hold {c['url']} (Instagram daily limit, next run)")
     SEEN_F.parent.mkdir(exist_ok=True)
     SEEN_F.write_text(json.dumps(seen, indent=0, sort_keys=True))
-    for c in sorted(picks, key=lambda c: -c["score"]):
-        log(f"  QUEUE {c['url']} (@{c['who']})")
-        print(c["url"])
+    for url, mode in out:
+        print(f"{url}\t{mode}")
 
 
 if __name__ == "__main__":

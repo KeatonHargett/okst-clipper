@@ -96,6 +96,10 @@ nothing, and stop. On POST: continue exactly as below and add "auto": true to th
 9. SHIP (unless hold or an open question): check the caption (#OKState first of exactly 5 hashtags, no hyphens or dashes, a
    blank line between parts and right before the hashtags), then once:
    `doppler run -p okst -c dev -- python ig_publish.py --reel "<STAGE>/<mp4>"`.
+   DAILY LIMIT: if publishing fails with Instagram's Content Publishing API limit ("maximum number of posts", code 9 or
+   2207042), nothing went out. Append {"url": "<URL>", "auto": <true if auto else false>, "date": "<YYYY-MM-DD>"} to
+   $GITHUB_WORKSPACE/state/pending.jsonl, write TITLE `Waiting: @handle (Instagram daily limit, ships when it resets)`,
+   say in REPORT that okst-scout ships it automatically when room frees up, and stop. Do not add it to LOG.
    If <base>.published.json already exists, it went out: do not run it again. A failed publish: never retry; put the error in
    REPORT. "WARNING: Facebook post failed" still counts as shipped: give the retry command in REPORT.
    Append to LOG: {"date": "<YYYY-MM-DD America/Chicago>", "url": "<URL>", "slug": "<slug>", "instagram": "<permalink>", "facebook": "<link or FAILED>"}

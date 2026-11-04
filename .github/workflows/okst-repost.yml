@@ -102,7 +102,7 @@ jobs:
           [ -s out/report.md ] || echo "**No report written.** Check the run log." > out/report.md
           printf '\n\n[Run and files](%s/%s/actions/runs/%s)\n' "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" >> out/report.md
           title=$(head -n1 out/title.txt 2>/dev/null || true)
-          if [ "${{ inputs.auto }}" = "true" ] && [ "${title#Skipped}" != "$title" ]; then
+          if [ "${{ inputs.auto }}" = "true" ] && { [ "${title#Skipped}" != "$title" ] || [ "${title#Waiting}" != "$title" ]; }; then
             # Auto runs that do not post stay quiet: one line in state/scout-skips.jsonl instead of an issue.
             python3 -c "import json,sys,datetime;print(json.dumps({'date':datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M'),'url':sys.argv[1],'why':sys.argv[2]}))" "$CLEAN_URL" "$title" >> state/scout-skips.jsonl
             echo "auto skip logged: $title"
@@ -115,4 +115,5 @@ jobs:
           git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
           [ -f state/reposted.jsonl ] && git add state/reposted.jsonl
           [ -f state/scout-skips.jsonl ] && git add state/scout-skips.jsonl
+          [ -f state/pending.jsonl ] && git add state/pending.jsonl
           git diff --cached --quiet || (git commit -q -m "repost: $CLEAN_URL" && git pull -q --rebase && git push -q)
