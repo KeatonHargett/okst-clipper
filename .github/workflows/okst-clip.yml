@@ -24,7 +24,7 @@ jobs:
       - uses: dopplerhq/cli-action@v3
       - name: Tools
         run: |
-          bash cloud/apt_install.sh ffmpeg fonts-dejavu-core
+          bash cloud/install_media_tools.sh
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
           pip install -q -U "yt-dlp[default]" faster-whisper opencv-python-headless pillow numpy

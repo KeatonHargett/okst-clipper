@@ -62,7 +62,7 @@ jobs:
       - name: Tools
         if: steps.link.outputs.repeat != 'true'
         run: |
-          bash cloud/apt_install.sh ffmpeg fonts-dejavu-core fonts-noto-color-emoji
+          WANT_EMOJI=1 bash cloud/install_media_tools.sh
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
           pip install -q -U "yt-dlp[default,curl-cffi]" faster-whisper pillow pillow-heif numpy
