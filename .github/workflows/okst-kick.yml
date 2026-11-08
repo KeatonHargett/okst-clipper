@@ -1,6 +1,8 @@
 name: okst-kick
 # Free timer for okst-scout (GitHub's own cron has not been firing on this repo).
 # Each run queues the next kick run first, then starts okst-scout every 30 min from 7 am to 11 pm Central.
+# The same loop also starts okst-watch from 9 am to midnight Central, at most once per 30 min
+# (okst-watch's own cron stays as a backup and counts toward that limit).
 # Runs chain: the queued run starts when this one ends, so the timer keeps itself alive.
 # A watchdog runs every 6 hours and restarts the chain if nothing is queued or running.
 on:
@@ -40,15 +42,29 @@ jobs:
         if: ${{ inputs.chain }}
         env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
         run: gh workflow run okst-kick.yml && echo "next kick run queued"
-      - name: Start the scout every 30 minutes (7 am to 11 pm Central)
+      - name: Start the scout every 30 minutes (7 am to 11 pm Central) and the watch (9 am to midnight Central)
         env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
         run: |
+          start_watch() {
+            # At most one okst-watch start per 30 minutes, counting its own cron runs and any other kick run.
+            local last created status age
+            last=$(gh api "repos/$GH_REPO/actions/workflows/okst-watch.yml/runs?per_page=1" \
+              -q '.workflow_runs[0] | "\(.created_at) \(.status)"') || { echo "::warning::could not read okst-watch runs, watch skipped"; return 0; }
+            created=${last%% *}; status=${last#* }
+            if [ -n "$created" ] && [ "$created" != "null" ]; then
+              age=$(( $(date +%s) - $(date -d "$created" +%s) ))
+              if [ "$age" -lt 1800 ]; then echo "$(TZ=America/Chicago date +%H:%M) watch skipped, last run started $((age / 60)) min ago"; return 0; fi
+              case "$status" in queued|pending|waiting|requested) echo "$(TZ=America/Chicago date +%H:%M) watch skipped, a run is already waiting"; return 0 ;; esac
+            fi
+            if gh workflow run okst-watch.yml; then echo "$(TZ=America/Chicago date +%H:%M) watch started"; else echo "::warning::watch start failed"; fi
+          }
           for i in $(seq 1 "${{ inputs.loops }}"); do
-            h=$(TZ=America/Chicago date +%H)
-            if [ "$((10#$h))" -ge 7 ] && [ "$((10#$h))" -le 23 ]; then
+            h=$((10#$(TZ=America/Chicago date +%H)))
+            if [ "$h" -ge 7 ] && [ "$h" -le 23 ]; then
               if gh workflow run okst-scout.yml; then echo "$(TZ=America/Chicago date +%H:%M) scout started"; else echo "::warning::scout start failed"; fi
             else
               echo "$(TZ=America/Chicago date +%H:%M) quiet hours, skipped"
             fi
+            if [ "$h" -ge 9 ]; then start_watch; fi
             if [ "$i" -lt "${{ inputs.loops }}" ]; then sleep 1800; fi
           done
