@@ -1,0 +1,166 @@
+name: okst-highlights
+# Postgame highlight Reels for one Oklahoma State game. okst-kick starts this when cloud/games.py due lists a game
+# (about 30 minutes before kickoff); it waits for the final, waits for the official highlights videos, and posts up
+# to 3 Reels (Instagram + Facebook) with no approval step. Manual: Actions > okst-highlights > Run workflow.
+# Kill switch: state/highlights_off (okst-highlights-switch workflow). See README "Postgame highlights".
+run-name: "okst-highlights ${{ inputs.sport }} ${{ inputs.event }}${{ inputs.hold && ' hold' || '' }}${{ inputs.replay && ' replay' || '' }}"
+on:
+  workflow_dispatch:
+    inputs:
+      event: { description: "ESPN event id", required: true }
+      sport: { description: "Sport key in cloud/highlights.json", required: true, default: "football" }
+      hold: { description: "Make everything but post nothing (stage only)", type: boolean, default: false }
+      replay: { description: "Game is already final: skip the wait (tests and re-runs)", type: boolean, default: false }
+      relay: { description: "Internal: how many times this game's wait has been handed to a fresh run", default: "0" }
+permissions:
+  contents: write
+  issues: write
+  actions: write
+concurrency: { group: "okst-highlights-${{ inputs.event }}", cancel-in-progress: false }
+jobs:
+  highlights:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      EVENT: ${{ inputs.event }}
+      SPORT: ${{ inputs.sport }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gate (kill switch, repeat, per game cap, first game hold)
+        id: gate
+        run: |
+          python3 cloud/games.py gate --event "$EVENT" --sport "$SPORT" \
+            ${{ inputs.replay && '--replay' || '' }} ${{ inputs.hold && '--hold' || '' }}
+      - name: Wait for the final
+        id: wait
+        if: steps.gate.outputs.go == 'true' && !inputs.replay
+        timeout-minutes: 220
+        run: |
+          set +e
+          python3 cloud/games.py wait --event "$EVENT" --sport "$SPORT" --minutes 210
+          rc=$?
+          if [ $rc = 1 ] && [ "${{ inputs.relay }}" -lt 2 ]; then
+            # Long game: hand the wait to a fresh run so this job never hits GitHub's 6 hour limit.
+            gh workflow run okst-highlights.yml -f event="$EVENT" -f sport="$SPORT" \
+              -f hold=${{ inputs.hold }} -f relay=$(( ${{ inputs.relay }} + 1 ))
+            echo "state=relayed" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          [ $rc = 0 ] && echo "state=final" >> "$GITHUB_OUTPUT" || echo "state=stop$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Decide
+        id: run
+        run: |
+          go=${{ steps.gate.outputs.go }}
+          w="${{ steps.wait.outputs.state }}"
+          [ "${{ inputs.replay }}" = "true" ] || [ "$w" = "final" ] || go=false
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "gate: ${{ steps.gate.outputs.reason }} | wait: ${w:-skipped} | go=$go hold=${{ steps.gate.outputs.hold }}"
+      - name: Game facts (ESPN)
+        if: steps.run.outputs.go == 'true'
+        run: python3 cloud/games.py facts --event "$EVENT" --sport "$SPORT" --out out/facts.json
+      - uses: actions/setup-python@v5
+        if: steps.run.outputs.go == 'true'
+        with: { python-version: "3.12" }
+      - uses: dopplerhq/cli-action@v3
+        if: steps.run.outputs.go == 'true'
+      - name: Tools
+        if: steps.run.outputs.go == 'true'
+        run: |
+          WANT_EMOJI=1 bash cloud/install_media_tools.sh
+          curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i /tmp/cloudflared.deb >/dev/null
+          pip install -q -U "yt-dlp[default,curl-cffi]" pillow numpy
+          npm install -g -s @anthropic-ai/claude-code
+      - name: Mask secrets and load the Claude token
+        if: steps.run.outputs.go == 'true'
+        run: |
+          doppler secrets download -p okst -c dev --no-file --format json \
+            | python -c "import sys,json;[print('::add-mask::'+l) for v in json.load(sys.stdin).values() for l in str(v).splitlines() if len(l)>5]"
+          echo "CLAUDE_CODE_OAUTH_TOKEN=$(doppler secrets get CLAUDE_CODE_OAUTH_TOKEN -p okst -c dev --plain)" >> "$GITHUB_ENV"
+      - name: Cloudflare WARP (YouTube blocks cloud IPs)
+        if: steps.run.outputs.go == 'true'
+        run: bash cloud/setup_warp.sh
+      - name: Find and download sources
+        if: steps.run.outputs.go == 'true'
+        timeout-minutes: 250
+        run: |
+          doppler run -p okst -c dev -- python cloud/highlight_sources.py --facts out/facts.json \
+            --out out/sources.json --download chopify/work/hl ${{ inputs.replay && '' || '--wait' }}
+      - name: Make and post the highlights (Claude)
+        if: steps.run.outputs.go == 'true'
+        timeout-minutes: 90
+        run: |
+          args="$EVENT $SPORT posts_left=${{ steps.gate.outputs.posts_left }}"
+          [ "${{ steps.gate.outputs.hold }}" = "true" ] && args="$args hold"
+          claude -p "/okst-highlights-cloud $args" \
+            --permission-mode bypassPermissions --model claude-opus-5-5 \
+            --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || echo "claude exited $?"
+          python -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];f=[x for x in r if x.get('type')=='result'];print(f[-1].get('result','')[:3000] if f else 'no result')" "$RUNNER_TEMP/claude.jsonl"
+      - name: Copyright stop
+        if: always() && steps.run.outputs.go == 'true'
+        run: |
+          if [ -f out/copyright_stop ]; then
+            mkdir -p state && echo "$(date -u +%FT%TZ) copyright or rights error on $SPORT $EVENT: $(head -c 400 out/copyright_stop)" > state/highlights_off
+            printf '**okst-highlights switched itself OFF** after a copyright or rights error. Nothing will be retried.\n\n```\n%s\n```\n\nTo turn it back on: Actions > okst-highlights-switch > Run workflow > on.\n' "$(cat out/copyright_stop)" > out/copyright.md
+            python3 cloud/post_issues.py --title "okst-highlights OFF: copyright or rights error ($SPORT $EVENT)" --body-file out/copyright.md
+          fi
+      - name: Upload files
+        if: always() && steps.run.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: okst-highlights-${{ inputs.event }}
+          path: |
+            out/
+            !out/**/*.parts/**
+          retention-days: 30
+      - name: Issues (one per post, with the cover)
+        if: always() && steps.run.outputs.go == 'true'
+        run: |
+          link="[Run and files](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          if ls out/issues/*.json >/dev/null 2>&1; then
+            python3 - "$link" <<'PY'
+          import json, sys, pathlib
+          for f in pathlib.Path("out/issues").glob("*.json"):
+              d = json.loads(f.read_text(encoding="utf-8")); d["body"] = d.get("body", "").rstrip() + "\n\n" + sys.argv[1]
+              f.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+          PY
+            python3 cloud/post_issues.py --dir out/issues --prefix "$EVENT"
+          else
+            [ -s out/report.md ] || echo "**No report written.** Check the run log." > out/report.md
+            printf '\n\n%s\n' "$link" >> out/report.md
+            python3 cloud/post_issues.py --title "Highlights: $SPORT $EVENT (no posts)" --body-file out/report.md
+          fi
+      - name: Record the game
+        if: always() && steps.run.outputs.go == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, datetime
+          ev, sport = os.environ["EVENT"], os.environ["SPORT"]
+          hold = "${{ steps.gate.outputs.hold }}" == "true"
+          summ = pathlib.Path("out/summary.json")
+          s = json.loads(summ.read_text()) if summ.exists() else {}
+          rendered, posted = int(s.get("rendered", 0)), int(s.get("posted", 0))
+          now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+          g = pathlib.Path("state/highlights-games.json")
+          games = json.loads(g.read_text()) if g.exists() else {}
+          prev = games.get(ev, {})
+          if not hold:   # a hold run never marks the game done, so the real run can still post
+              games[ev] = {"sport": sport, "status": "done" if posted or rendered else "failed", "posted": posted,
+                           "at": now, "tries": prev.get("tries", 0) + 1}
+          elif prev.get("status") != "done":
+              games[ev] = {**prev, "sport": sport, "held_at": now, "held_rendered": rendered}
+          g.write_text(json.dumps(games, indent=1, sort_keys=True) + "\n")
+          if hold and rendered > 0:   # the hold test passed: this sport's next game posts for real
+              f = pathlib.Path("state/highlights-first.json")
+              first = json.loads(f.read_text()) if f.exists() else {}
+              first.setdefault(sport, {"event": ev, "at": now})
+              f.write_text(json.dumps(first, indent=1, sort_keys=True) + "\n")
+          print(f"rendered={rendered} posted={posted} hold={hold}")
+          PY
+      - name: Save state
+        if: always() && steps.run.outputs.go == 'true'
+        run: |
+          python3 cloud/save_state.py "highlights: $SPORT $EVENT" state/highlights-log.jsonl state/highlights-games.json \
+            state/highlights-first.json state/highlights_off state/reposted.jsonl

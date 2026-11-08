@@ -7,6 +7,8 @@ on:
       handle: { description: "Creator @handle (optional)", required: false, default: "" }
       hold: { description: "Make it but do not post", type: boolean, default: false }
       auto: { description: "Found by okst-scout: post only if it matches Keaton's taste, skip quietly otherwise", type: boolean, default: false }
+      highlight: { description: "Sent by okst-highlights: a network or league clip of an OSU play", type: boolean, default: false }
+      game: { description: "With highlight: <sport>:<ESPN event id>", required: false, default: "" }
 permissions:
   contents: write
   issues: write
@@ -20,6 +22,8 @@ jobs:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       RAW_URL: ${{ inputs.url }}
       HANDLE: ${{ inputs.handle }}
+      HIGHLIGHT: ${{ inputs.highlight }}
+      GAME: ${{ inputs.game }}
     steps:
       - uses: actions/checkout@v4
       - name: Clean the link and check for a repeat
@@ -37,17 +41,25 @@ jobs:
                       "tiktok" if "tiktok" in host else "youtube" if "youtu" in host else "other")
           log = pathlib.Path("state/reposted.jsonl")
           seen = log.exists() and any(json.loads(l).get("url") == url for l in log.read_text().splitlines() if l.strip())
+          off = False
+          if os.environ.get("HIGHLIGHT") == "true":      # okst-highlights kill switch (state/highlights_off on main)
+              import subprocess
+              off = subprocess.run(["python3", "cloud/games.py", "switch"]).returncode != 0
+              hl = pathlib.Path("state/highlights-log.jsonl")
+              seen = seen or (hl.exists() and any(json.loads(l).get("source") == url for l in hl.read_text().splitlines() if l.strip()))
           with open(os.environ["GITHUB_ENV"], "a") as f:
               f.write(f"CLEAN_URL={url}\n")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"url={url}\nplatform={platform}\nrepeat={'true' if (seen or platform == 'other') else 'false'}\n")
+              f.write(f"url={url}\nplatform={platform}\nrepeat={'true' if (seen or off or platform == 'other') else 'false'}\n"
+                      f"off={'true' if off else 'false'}\n")
           print(url, platform, "REPEAT" if seen else "new")
           PY
       - name: Already posted
         if: steps.link.outputs.repeat == 'true'
         run: |
           mkdir -p out
-          if [ "${{ steps.link.outputs.platform }}" = "other" ]; then msg="not a TikTok, Instagram, X, or YouTube link, so nothing ran (Shortcut test?)"; else msg="this link is already in state/reposted.jsonl, so it was not posted again"; fi
+          if [ "${{ steps.link.outputs.off }}" = "true" ]; then msg="okst-highlights is switched off (state/highlights_off), so this highlight was not posted"
+          elif [ "${{ steps.link.outputs.platform }}" = "other" ]; then msg="not a TikTok, Instagram, X, or YouTube link, so nothing ran (Shortcut test?)"; else msg="this link is already in state/reposted.jsonl, so it was not posted again"; fi
           echo "Skipped: $CLEAN_URL" > out/title.txt
           printf '**Held:** %s.\n\n%s\n' "$msg" "$CLEAN_URL" > out/report.md
       - uses: actions/setup-python@v5
@@ -77,6 +89,9 @@ jobs:
       - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
         if: steps.link.outputs.repeat != 'true' && (steps.link.outputs.platform == 'tiktok' || steps.link.outputs.platform == 'youtube')
         run: bash cloud/setup_warp.sh
+      - name: Game facts for a highlight (ESPN)
+        if: steps.link.outputs.repeat != 'true' && inputs.highlight
+        run: python3 cloud/games.py facts --event "${GAME#*:}" --sport "${GAME%%:*}" --out out/facts.json
       - name: Repost (Claude)
         if: steps.link.outputs.repeat != 'true'
         run: |
@@ -85,10 +100,20 @@ jobs:
           [ -n "$HANDLE" ] && args="$args @${HANDLE#@}"
           [ "${{ inputs.hold }}" = "true" ] && args="$args hold"
           [ "${{ inputs.auto }}" = "true" ] && args="$args auto"
+          [ "${{ inputs.highlight }}" = "true" ] && args="$args highlight=$GAME"
           claude -p "/okst-repost-cloud $args" \
             --permission-mode bypassPermissions --model claude-opus-5-5 \
             --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || echo "claude exited $?"
           python -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];f=[x for x in r if x.get('type')=='result'];print(f[-1].get('result','')[:3000] if f else 'no result')" "$RUNNER_TEMP/claude.jsonl"
+      - name: Copyright stop (highlights)
+        if: always() && inputs.highlight
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if [ -f out/copyright_stop ]; then
+            echo "$(date -u +%FT%TZ) copyright or rights error on highlight repost $CLEAN_URL: $(head -c 400 out/copyright_stop)" > state/highlights_off
+            printf '**okst-highlights switched itself OFF** after a copyright or rights error on %s. Nothing will be retried.\n\n```\n%s\n```\n\nTo turn it back on: Actions > okst-highlights-switch > Run workflow > on.\n' "$CLEAN_URL" "$(cat out/copyright_stop)" > out/copyright.md
+            python3 cloud/post_issues.py --title "okst-highlights OFF: copyright or rights error ($GAME)" --body-file out/copyright.md
+          fi
       - name: Upload files
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,6 +130,9 @@ jobs:
             # Auto runs that do not post stay quiet: one line in state/scout-skips.jsonl instead of an issue.
             python3 -c "import json,sys,datetime;print(json.dumps({'date':datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M'),'url':sys.argv[1],'why':sys.argv[2]}))" "$CLEAN_URL" "$title" >> state/scout-skips.jsonl
             echo "auto skip logged: $title"
+          elif [ "${{ inputs.highlight }}" = "true" ]; then
+            set -- ; for c in out/*/*.cover.jpg; do [ -f "$c" ] && set -- "$@" --image "$c"; done
+            python3 cloud/post_issues.py --title "Highlight repost: ${title:-$CLEAN_URL}" --body-file out/report.md --prefix "${GAME#*:}" "$@"
           else
             gh issue create --title "Repost: ${title:-$CLEAN_URL}" --body-file out/report.md
           fi
@@ -112,4 +140,5 @@ jobs:
         if: always()
         # Replays this run's lines on the latest main (parallel runs used to conflict here and fail).
         run: |
-          python3 cloud/save_state.py "repost: $CLEAN_URL" state/reposted.jsonl state/scout-skips.jsonl state/pending.jsonl
+          python3 cloud/save_state.py "repost: $CLEAN_URL" state/reposted.jsonl state/scout-skips.jsonl state/pending.jsonl \
+            state/highlights-log.jsonl state/highlights_off

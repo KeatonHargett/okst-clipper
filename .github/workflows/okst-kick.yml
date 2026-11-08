@@ -3,6 +3,8 @@ name: okst-kick
 # Each run queues the next kick run first, then starts okst-scout every 30 min from 7 am to 11 pm Central.
 # The same loop also starts okst-watch from 9 am to midnight Central, at most once per 30 min
 # (okst-watch's own cron stays as a backup and counts toward that limit).
+# Every loop, any hour, it also starts okst-highlights for an Oklahoma State game that is about to start, live, or just
+# ended (cloud/games.py due), once per game.
 # Runs chain: the queued run starts when this one ends, so the timer keeps itself alive.
 # A watchdog runs every 6 hours and restarts the chain if nothing is queued or running.
 on:
@@ -38,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 345
     steps:
+      - uses: actions/checkout@v4
       - name: Queue the next kick run
         if: ${{ inputs.chain }}
         env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
@@ -58,7 +61,26 @@ jobs:
             fi
             if gh workflow run okst-watch.yml; then echo "$(TZ=America/Chicago date +%H:%M) watch started"; else echo "::warning::watch start failed"; fi
           }
+          start_highlights() {
+            # One okst-highlights run per game: skip any game whose event id is already in a run's title.
+            local due titles sport event
+            git fetch -q origin main && git reset -q --hard origin/main || true      # current config
+            due=$(python3 cloud/games.py due) || { echo "::warning::could not read ESPN schedules, highlights skipped"; return 0; }
+            [ -n "$due" ] || return 0
+            titles=$(gh api "repos/$GH_REPO/actions/workflows/okst-highlights.yml/runs?per_page=100" \
+              -q '.workflow_runs[].display_title') || { echo "::warning::could not read okst-highlights runs"; return 0; }
+            while read -r sport event; do
+              [ -n "$event" ] || continue
+              if echo "$titles" | grep -qw -- "$event"; then continue; fi
+              if gh workflow run okst-highlights.yml -f event="$event" -f sport="$sport"; then
+                echo "$(TZ=America/Chicago date +%H:%M) highlights started for $sport $event"
+              else
+                echo "::warning::highlights start failed for $sport $event"
+              fi
+            done <<< "$due"
+          }
           for i in $(seq 1 "${{ inputs.loops }}"); do
+            start_highlights
             h=$((10#$(TZ=America/Chicago date +%H)))
             if [ "$h" -ge 7 ] && [ "$h" -le 23 ]; then
               if gh workflow run okst-scout.yml; then echo "$(TZ=America/Chicago date +%H:%M) scout started"; else echo "::warning::scout start failed"; fi

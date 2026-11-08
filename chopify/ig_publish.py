@@ -52,6 +52,13 @@ MAX_SLIDES = 10
 DASHES = ("-", "‐", "‑", "‒", "–", "—", "―", "−")
 
 
+# A rights problem (Instagram or Facebook refusing or pulling a video over copyright). With --strict-rights the
+# script exits 3 so okst-highlights can switch itself off instead of retrying.
+RIGHTS = re.compile(r"copyright|intellectual property|rights? (holder|owner|manager)|infring|content id|"
+                    r"blocked (in|for) .*(countr|region)", re.I)
+RIGHTS_EXIT = 3
+
+
 class ApiError(RuntimeError):
     pass
 
@@ -669,7 +676,21 @@ def release(_label=None):
     LOCK.unlink(missing_ok=True)
 
 
-def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False):
+def cmd_verify(media_id):
+    """After a highlight posts: is it still up? Exit RIGHTS_EXIT if Instagram removed it."""
+    token = maybe_refresh(load_token())
+    try:
+        m = get(media_id, token, fields="id,permalink,media_product_type")
+    except ApiError as e:
+        if RIGHTS.search(str(e)) or re.search(r"does not exist|nonexisting|Unsupported get request|\(100\)|code 100",
+                                               str(e), re.I):
+            print(f"REMOVED {media_id}: {e}")
+            sys.exit(RIGHTS_EXIT)
+        raise
+    print(f"OK {m.get('permalink')}")
+
+
+def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_rights=False):
     """Publish one mp4 as a Reel (shared to the feed). Caption is the .txt with the same base name."""
     mp4 = mp4.resolve()
     done = mp4.with_name(mp4.stem + ".published.json")
@@ -719,6 +740,10 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False):
         print(f"PUBLISHED {permalink}")
         if fb:
             fb_share(done, lambda t: fb_video(mp4, caption, info, t))
+            err = json.loads(done.read_text(encoding="utf-8")).get("facebook_error") or ""
+            if strict_rights and RIGHTS.search(err):
+                print(f"COPYRIGHT_BLOCK facebook: {err}")
+                sys.exit(RIGHTS_EXIT)
     finally:
         release()
 
@@ -756,23 +781,32 @@ def main():
     ap.add_argument("--check-location", nargs="+", metavar="PAGE_ID",
                     help="Check Facebook Page IDs as Instagram locations before adding them to locations.json")
     ap.add_argument("--no-fb", action="store_true", help="Post to Instagram only, skip the OKSTProbs Facebook Page")
+    ap.add_argument("--strict-rights", action="store_true",
+                    help="Exit 3 (COPYRIGHT_BLOCK) on any copyright or rights error, Instagram or Facebook")
+    ap.add_argument("--verify", metavar="MEDIA_ID", help="Check a published post is still up (exit 3 if removed)")
     ap.add_argument("--fb-only", action="store_true",
                     help="Post an item already on Instagram to the Facebook Page only (retry after a Facebook failure)")
     args = ap.parse_args()
     if args.fb_only and (args.no_fb or args.stage_only):
         ap.error("--fb-only cannot be combined with --no-fb or --stage-only")
     try:
-        if args.check_location:
+        if args.verify:
+            cmd_verify(args.verify)
+        elif args.check_location:
             cmd_check_location(args.check_location)
         elif args.check:
             cmd_check(args.refresh)
         elif args.reel:
-            cmd_reel(Path(args.reel), args.dry_run, args.stage_only, not args.no_fb, args.fb_only)
+            cmd_reel(Path(args.reel), args.dry_run, args.stage_only, not args.no_fb, args.fb_only,
+                     args.strict_rights)
         elif args.folder:
             cmd_publish(Path(args.folder), args.dry_run, not args.no_fb, args.fb_only)
         else:
             ap.error("give a review folder, --reel <mp4>, or --check")
     except ApiError as e:
+        if args.strict_rights and RIGHTS.search(str(e)):
+            print(f"COPYRIGHT_BLOCK instagram: {e}")
+            sys.exit(RIGHTS_EXIT)
         sys.exit(f"Instagram API error: {e}")
 
 

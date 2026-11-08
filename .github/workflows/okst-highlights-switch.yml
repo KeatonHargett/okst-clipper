@@ -1,0 +1,31 @@
+name: okst-highlights-switch
+# The okst-highlights kill switch. off = create state/highlights_off (no highlight posts, nothing retried);
+# on = remove it. From an iPhone: GitHub app > this repo > Actions > okst-highlights-switch > Run workflow,
+# or a Shortcut that POSTs {"ref":"main","inputs":{"state":"off"}} to
+# https://api.github.com/repos/KeatonHargett/okst-clipper/actions/workflows/okst-highlights-switch.yml/dispatches
+run-name: "okst-highlights switch ${{ inputs.state }}"
+on:
+  workflow_dispatch:
+    inputs:
+      state: { description: "off stops highlight posts; on lets them run", type: choice, options: ["off", "on"], default: "off" }
+      why: { description: "Note (optional)", required: false, default: "" }
+permissions:
+  contents: write
+concurrency: { group: okst-highlights-switch, cancel-in-progress: false }
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Flip the switch
+        env: { WHY: "${{ inputs.why }}" }
+        run: |
+          mkdir -p state
+          if [ "${{ inputs.state }}" = "off" ]; then
+            echo "$(date -u +%FT%TZ) switched off by hand${WHY:+: $WHY}" > state/highlights_off
+          else
+            rm -f state/highlights_off
+          fi
+          python3 cloud/save_state.py "highlights switch: ${{ inputs.state }}" state/highlights_off
+          echo "okst-highlights is now ${{ inputs.state }}"

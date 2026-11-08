@@ -1,7 +1,7 @@
 ---
 name: okst-repost-cloud
 description: Unattended cloud version of /okst-repost, run by the okst-repost GitHub Actions workflow when Keaton shares a link from his iPhone. Reposts the TikTok, Instagram, X, or YouTube post to Instagram @okstprobs and the OKSTProbs Facebook Page and writes a report for the GitHub issue.
-argument-hint: <url> [@handle] [hold] [auto]
+argument-hint: <url> [@handle] [hold] [auto] [highlight=<sport>:<event>]
 disable-model-invocation: true
 ---
 
@@ -9,7 +9,7 @@ disable-model-invocation: true
 
 Input: $ARGUMENTS
 First token is the post URL (the workflow already stripped tracking parameters). Optional: `@handle` (the creator, overrides
-the info JSON), `hold` (make and stage everything, ship nothing), `auto` (found by okst-scout: see AUTO).
+the info JSON), `hold` (make and stage everything, ship nothing), `auto` (found by okst-scout: see AUTO), `highlight=<sport>:<event>` (sent by okst-highlights: see HIGHLIGHT).
 
 You run alone on a GitHub Actions runner. Nobody can answer a question. Wherever the desktop /okst-repost would stop and ask,
 write the question into REPORT, ship nothing, and finish. Never wait. Sharing the link was Keaton's approval: ship without asking.
@@ -51,6 +51,45 @@ have looked at the frames, transcript, and caption, decide POST or SKIP:
 - When unsure, SKIP. A skipped post costs nothing; a bad post costs reach.
 On SKIP: write TITLE as `Skipped: @handle <one line reason>` (it must start with `Skipped`), write a short REPORT, ship
 nothing, and stop. On POST: continue exactly as below and add "auto": true to the LOG line. Never ask anything.
+
+## HIGHLIGHT (the input has `highlight=<sport>:<event>`: okst-highlights sent a network, league, or OSU account's clip)
+okst-highlights picked this video as the best play of a finished Oklahoma State game; Keaton approved posting it. It overrides
+these parts of the normal flow, everything else stays the same:
+- The AUTO "full network upload" SKIP does not apply: the account is one of the allowed sources in
+  $GITHUB_WORKSPACE/cloud/highlights.json. Still hold (ship nothing, say why) if it turns out not to be an OSU play from
+  this game, or if it is any account not in that file.
+- The video stays exactly as posted: no trim (skip step 4), no re encode unless step 3 requires it. Never crop, blur, or
+  cover the network's logo or watermark.
+- FACTS: $GITHUB_WORKSPACE/out/facts.json (ESPN data for the game). Every number in the caption and cover comes from it.
+- Caption (replaces step 6):
+      <opening line: what happened, under 12 words>
+
+      <emoji> <fact from FACTS>
+      <emoji> <fact from FACTS>
+      <emoji> <fact from FACTS>
+
+      🎥 @<account>
+
+      #OKState #GoPokes <FACTS.hashtag> #<Opponent location, no spaces> #Big12
+  No hyphens or dashes (scores "66 to 28", records "6 and 3"), no "tag a friend", no irony. Non conference opponent: swap
+  #Big12 for #CollegeFootball or #CollegeBasketball. Check it: `python okst_highlights.py check-caption <base>.txt` must print
+  CAPTION OK.
+- Cover: `ffmpeg -v error -ss <a strong moment> -i <mp4> -frames:v 1 -q:v 2 <STAGE>/<base>.frame.jpg`, then
+  `python make_cover.py "<STAGE>/<mp4>" --template game --facts "$GITHUB_WORKSPACE/out/facts.json" --text "<SHORT CAPS HEADLINE>"`.
+  The headline must pass `python okst_highlights.py verify-headline "<headline>" --facts "$GITHUB_WORKSPACE/out/facts.json"`.
+  Look at <base>.cover.debug.jpg (everything between the cyan lines).
+- Ship (replaces step 9's command): hold uses
+  `doppler run -p okst -c dev -- python ig_publish.py --reel "<STAGE>/<mp4>" --stage-only --strict-rights`; otherwise first
+  `python ../cloud/games.py switch` (OFF: ship nothing, TITLE `Skipped: highlights switched off`), then
+  `doppler run -p okst -c dev -- python ig_publish.py --reel "<STAGE>/<mp4>" --strict-rights` once. Exit code 3 or
+  COPYRIGHT_BLOCK in the output: write the whole output to $GITHUB_WORKSPACE/out/copyright_stop, ship nothing more, never
+  retry (the workflow switches highlights off and opens an issue). Daily limit: report it, do not queue it in pending.jsonl.
+- After it posts, append the usual LOG line and also one line to $GITHUB_WORKSPACE/state/highlights-log.jsonl:
+  {"date": "<YYYY-MM-DD America/Chicago>", "event": "<event>", "sport": "<sport>", "format": "network", "slug": "<slug>",
+  "source": "<URL>", "instagram": "<permalink>", "facebook": "<link or FAILED>", "media_id": "<from <base>.published.json>"}.
+  Then wait 120 s and run `doppler run -p okst -c dev -- python ig_publish.py --verify <media_id>`; exit 3 (REMOVED): write
+  its output to $GITHUB_WORKSPACE/out/copyright_stop.
+- TITLE: `Posted: @<account> highlight (<OSU> vs <OPP>)`, or `Held: ...` / `Skipped: ...`.
 
 ## Routing
 - Instagram: `doppler run -p okst -c dev -- python okst_carousel.py fetch "<URL>" [--handle @handle]`.

@@ -1,0 +1,42 @@
+{
+  "_about": "Config for okst-highlights (postgame highlight Reels). Edit freely: turn a sport off with enabled false, add or remove source accounts. Instagram handles must be Business or Creator accounts (Business Discovery cannot read personal accounts; @cowboyfb fails that way).",
+  "team_id": "197",
+  "max_posts_per_game": 3,
+  "first_game_hold": true,
+  "proceed_after_minutes": 25,
+  "source_wait_minutes": 240,
+  "final_wait_minutes": 330,
+  "sports": {
+    "football": {
+      "enabled": true,
+      "espn": "football/college-football",
+      "label": "Football",
+      "hashtag": "#OKStateFootball",
+      "start_before_minutes": 30,
+      "game_hours": 4.5,
+      "big_score": 50,
+      "instagram_sources": ["cfbonfox", "espncfb", "big12conference", "osuathletics", "tntsports"],
+      "youtube_channels": [
+        {"name": "Oklahoma State Athletics", "url": "https://www.youtube.com/channel/UCiPbE1TBmEfgUWcQJUztxrQ/videos"},
+        {"name": "Big 12 Conference", "url": "https://www.youtube.com/@Big12Conference/videos"}
+      ]
+    },
+    "mens-basketball": {
+      "enabled": true,
+      "espn": "basketball/mens-college-basketball",
+      "label": "Men's Basketball",
+      "hashtag": "#OKStateMBB",
+      "start_before_minutes": 20,
+      "game_hours": 3,
+      "big_score": 95,
+      "instagram_sources": ["cbbonfox", "osumbb", "big12conference", "osuathletics", "tntsports"],
+      "youtube_channels": [
+        {"name": "Oklahoma State Athletics", "url": "https://www.youtube.com/channel/UCiPbE1TBmEfgUWcQJUztxrQ/videos"},
+        {"name": "Big 12 Conference", "url": "https://www.youtube.com/@Big12Conference/videos"}
+      ]
+    }
+  },
+  "youtube_title_words": ["highlights", "scoring plays", "condensed"],
+  "youtube_skip_words": ["news conference", "press conference", "hype", "trailer", "preview", "mic'd", "micd", "all access"],
+  "osu_words": ["oklahoma state", "okstate", "ok state", "okst", "pokes", "gopokes", "pistol pete", "@osuathletics", "@osumbb", "osu"]
+}

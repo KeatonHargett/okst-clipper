@@ -8,6 +8,12 @@ Reads <base>.frame.jpg (written by okst_clip.py; falls back to the mp4's middle 
 <base>.txt (line 1, or line 2 when line 1 is a press conference "<name> spoke ..." line).
 Writes <base>.cover.jpg (1080x1920). ig_publish.py uploads it as the Reel cover when it exists.
 Never overwrites an existing cover.
+
+Game template (okst-highlights postgame Reels):
+    python make_cover.py "<base>.mp4" --template game --facts facts.json --text "COWBOYS HANG 66 ON KANSAS STATE"
+OSU orange, OSU logo, the full 16:9 action still (<base>.frame.jpg, never cropped: network logos stay whole),
+the headline in slanted Impact caps, and a black final score box. Everything sits inside the grid's 3:4 crop
+(y 240 to 1680). Also writes <base>.cover.debug.jpg with that crop drawn on it.
 """
 
 import argparse
@@ -103,11 +109,98 @@ def base_frame(mp4):
     return Image.open(tmp).convert("RGB")
 
 
+GRID = (240, 1680)                # the profile grid's 3:4 crop of a 9:16 cover
+OSU_LOGO = PROJECT / "assets" / "osu_logo.png"
+
+
+def game_cover(mp4, out, text, facts_path):
+    """Postgame highlight cover: everything important inside GRID, the action frame shown whole."""
+    import json
+    f = json.loads(Path(facts_path).read_text(encoding="utf-8"))
+    orange = ACCENT["orange"]
+    img = Image.new("RGB", (W, H), orange)
+    d = ImageDraw.Draw(img)
+    for y in range(H):                                            # orange, a little deeper toward the bottom
+        k = 1 - 0.28 * y / H
+        d.line((0, y, W, y), fill=tuple(int(c * k) for c in orange))
+    boxes = []
+    logo = Image.open(OSU_LOGO).convert("RGBA")
+    logo.thumbnail((300, 150), Image.LANCZOS)
+    lx, ly = (W - logo.width) // 2, 262
+    img.paste(logo, (lx, ly), logo)
+    boxes.append((lx, ly, lx + logo.width, ly + logo.height))
+    frame = base_frame(mp4)
+    fw, fh = frame.size
+    if fw / fh >= W / 608:                                        # 16:9 or wider: full width, never cropped
+        frame = frame.resize((W, round(W * fh / fw)), Image.LANCZOS)
+    else:                                                         # portrait or 4:3 still: fit inside, centered
+        frame = frame.resize((round(608 * fw / fh), 608), Image.LANCZOS)
+    fy = 430 + (608 - frame.height) // 2
+    fx = (W - frame.width) // 2
+    d.rectangle((0, 424, W, 1044), fill=(0, 0, 0))
+    img.paste(frame, (fx, fy))
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    top, bottom, maxw = 1070, 1440, 880
+    font = lines = None
+    for size in range(150, 69, -6):
+        ft = ImageFont.truetype(str(FONT), size)
+        for n in range(1, 4):
+            words = text.split()
+            if n > len(words):
+                break
+            (_, widest), ls = balanced(words, n, lambda l: draw.textlength(l, font=ft))
+            if widest <= maxw and n * size * 1.05 <= bottom - top and not (n > 1 and has_orphan(ls) and size > 90):
+                font, lines = ft, ls
+                break
+        if font:
+            break
+    if not font:
+        sys.exit(f"Headline too long for a game cover: {text!r}")
+    lh = font.size * 1.05
+    y = top + (bottom - top - lh * len(lines)) / 2
+    cy = y + lh * len(lines) / 2
+    for line in lines:
+        draw.text(((W - draw.textlength(line, font=font)) / 2, y), line, font=font, fill="white",
+                  stroke_width=8, stroke_fill="black")
+        y += lh
+    layer = layer.transform((W, H), Image.AFFINE, (1, SLANT, -SLANT * cy, 0, 1, 0), Image.BICUBIC)
+    img.paste(layer, (0, 0), layer)
+    bbox = layer.getbbox()
+    boxes.append(bbox)
+    osu, opp = f["osu"], f["opp"]
+    status = "FINAL" if f.get("final", True) else f.get("status", "").upper()
+    score = f"OSU {osu['score']}  ·  {opp['abbr']} {opp['score']}  ·  {status}"
+    sf = ImageFont.truetype(str(FONT), 76)
+    sw = draw.textlength(score, font=sf)
+    bw, bh = int(sw) + 90, 150
+    bx, by = (W - bw) // 2, 1490
+    box = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+    ImageDraw.Draw(box).rounded_rectangle((0, 0, bw - 1, bh - 1), 30, fill=(0, 0, 0, 245))
+    img.paste(box, (bx, by), box)
+    ImageDraw.Draw(img).text((bx + 45, by + (bh - 76 * 1.18) / 2), score, font=sf, fill="white")
+    boxes.append((bx, by, bx + bw, by + bh))
+    bad = [b for b in boxes if b[1] < GRID[0] or b[3] > GRID[1] or b[0] < 0 or b[2] > W]
+    if bad:
+        sys.exit(f"Cover element outside the grid crop {GRID}: {bad}")
+    img.save(out, "JPEG", quality=92)
+    dbg = img.copy()
+    dd = ImageDraw.Draw(dbg)
+    for gy in GRID:
+        dd.line((0, gy, W, gy), fill=(0, 255, 255), width=6)
+    for b in boxes:
+        dd.rectangle(b, outline=(0, 255, 0), width=4)
+    dbg.resize((540, 960)).save(out.with_name(out.stem + ".debug.jpg"), quality=85)
+    print(f"COVER {out}  (game template, {len(lines)} lines, {font.size}px): {' / '.join(lines)} | {score}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Make <base>.cover.jpg for an OKST Reel.")
     ap.add_argument("mp4")
     ap.add_argument("--color", default="orange", choices=list(ACCENT))
     ap.add_argument("--text", default=None, help="hook text (default: from <base>.txt)")
+    ap.add_argument("--template", default="hook", choices=["hook", "game"])
+    ap.add_argument("--facts", help="game template: facts.json from cloud/games.py facts")
     args = ap.parse_args()
 
     mp4 = Path(args.mp4).resolve()
@@ -115,6 +208,10 @@ def main():
     if out.exists():
         sys.exit(f"Already exists, not overwriting: {out}")
     text = (args.text or hook_text(mp4.with_suffix(".txt"))).upper()
+    if args.template == "game":
+        if not args.facts:
+            sys.exit("--template game needs --facts")
+        return game_cover(mp4, out, text, args.facts)
 
     img = base_frame(mp4).resize((W, H))
     img = ImageEnhance.Brightness(img).enhance(DARKEN)

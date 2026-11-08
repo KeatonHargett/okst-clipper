@@ -5,6 +5,7 @@ conflicted and the run failed (and its log lines were lost). This replays the ru
 the latest main and retries the push:
   .jsonl files: lines this run added are appended, lines it removed are removed (scout empties pending.jsonl).
   any other file: this run's version wins, but only if the run changed it.
+  a listed file the run deleted (it is on main but gone here) is deleted on main too (the highlights kill switch).
 Usage: python cloud/save_state.py "<commit message>" <file> [<file> ...]
 """
 import random
@@ -29,6 +30,8 @@ def main():
     for f in files:
         p = Path(f)
         if not p.exists():
+            if base_text(f) is not None:
+                changes.append((f, "delete", None, None))
             continue
         mine, base = p.read_text(encoding="utf-8"), base_text(f)
         if mine == base:
@@ -49,6 +52,9 @@ def main():
         git("reset", "-q", "--hard", "origin/main")
         for f, kind, a, removed in changes:
             p = Path(f)
+            if kind == "delete":
+                git("rm", "-q", "--ignore-unmatch", f)
+                continue
             if kind == "whole":
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(a, encoding="utf-8")
