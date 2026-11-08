@@ -85,6 +85,14 @@ def test_storylines():
     assert games.storylines(f, "football", []) == []
 
 
+def test_zoom_point_below_header():
+    for y in (0.4, 0.55, 0.7):
+        cw, ch, cx, cy = hl.zoom_crop(1920, 1080, {"x": 0.5, "y": y, "w": 0.45})
+        panel_y = (1080 * y - cy) / ch * hl.ZOOM_H          # where the zoom point lands in the 640 px panel
+        assert hl.SAFE[1] + 60 < panel_y < hl.ZOOM_H - 60, (y, panel_y)
+        assert 0 <= cy <= 1080 - ch and 0 <= cx <= 1920 - cw
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

@@ -8,7 +8,8 @@
     python okst_highlights.py verify-headline "<TEXT>" --facts facts.json [--storyline]
 
 Layout (1080x1920), the same for every format so nothing is ever cropped out of the broadcast:
-    y    0-640   zoomed copy of the action (footage only; the top 250 px sits under the app's own header)
+    y    0-640   zoomed copy of the action (footage only; the top 250 px sits under the app's own header, so the
+                 zoom point lands at y 445, the middle of the visible 250-640 band)
     y  640-646   orange seam
     y  646-1254  the full 16:9 frame, never cropped: network logo, score bug and watermarks stay exactly as broadcast
     y 1270-1460  OUR graphics: headline box (A), OSU logo + storyline box (B), score bar (C)
@@ -47,6 +48,7 @@ W, H, FPS = 1080, 1920, 30
 SAFE = (60, 250, W - 140, H - 450)          # x0, y0, x1, y1: where our text, scores and logos may go
 GRID = (240, 1680)                          # Instagram's 3:4 profile grid crop of a 9:16 Reel
 ZOOM_H, SEAM, FRAME_H = 640, 6, 608
+ZOOM_FOCUS = (SAFE[1] + ZOOM_H) / 2 / ZOOM_H    # 445/640: the zoom point sits mid visible band, not under the header
 FRAME_Y = ZOOM_H + SEAM
 BAND = (1270, 1460)
 ORANGE = (254, 92, 0)
@@ -58,6 +60,16 @@ DASHES = ("-", "‐", "‑", "‒", "–", "—", "―", "−")
 
 def font(size):
     return ImageFont.truetype(str(FONT), size)
+
+
+def zoom_crop(sw, sh, z):
+    """Crop (w, h, x, y) in source pixels for a zoom {x, y, w}: x, y is the action in the source frame (0..1), placed
+    at the horizontal centre and at ZOOM_FOCUS of the panel height, so it is never hidden under Instagram's header."""
+    cw = int(sw * z["w"]) // 2 * 2
+    ch = int(cw * ZOOM_H / W) // 2 * 2
+    cx = int(min(max(sw * z["x"] - cw / 2, 0), sw - cw))
+    cy = int(min(max(sh * z["y"] - ch * ZOOM_FOCUS, 0), sh - ch))
+    return cw, ch, cx, cy
 
 
 def run(cmd, **kw):
@@ -413,10 +425,7 @@ def render(plan_path):
             s, e = float(sg["start"]), float(sg["end"])
             dur = e - s
             z = {"x": 0.5, "y": 0.55, "w": 0.45, **(sg.get("zoom") or {})}
-            cw = int(sw * z["w"]) // 2 * 2
-            ch = int(cw * ZOOM_H / W) // 2 * 2
-            cx = int(min(max(sw * z["x"] - cw / 2, 0), sw - cw))
-            cy = int(min(max(sh * z["y"] - ch / 2, 0), sh - ch))
+            cw, ch, cx, cy = zoom_crop(sw, sh, z)
             chains.append(f"[0:v]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS,fps={FPS},setsar=1,split[za{i}][fa{i}]")
             chains.append(f"[za{i}]crop={cw}:{ch}:{cx}:{cy},scale={W}:{ZOOM_H},setsar=1[z{i}]")
             chains.append(f"[fa{i}]scale={W}:{FRAME_H},setsar=1[f{i}]")

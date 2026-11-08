@@ -58,7 +58,8 @@ untouched 16:9 frame below it, our graphics under the frame); it never crops or 
 Plan keys: format, facts (ROOT/out/facts.json), source (the source.mp4), out (ROOT/out/<slug>/<slug>.mp4), headline (A, B),
 cover_at (source second of the best still for the cover), segments.
 Each segment: {"start": s, "end": s, "zoom": {"x": 0..1, "y": 0..1, "w": 0.35..0.6}} in source seconds. x, y is the centre of
-the action in the source frame; w is the zoom crop's share of the frame width (smaller = closer). Wide shots of a long run
+the action in the source frame (the ball or ball carrier itself, no offset: the renderer puts that point in the middle of
+the panel's visible part, below Instagram's header); w is the zoom crop's share of the frame width (smaller = closer). Wide shots of a long run
 need w about 0.5 following the ball carrier; close ups need about 0.6.
 - FORMAT A (15 to 25 s): the live play from just before the snap to just after the score (or the moment), then one replay
   angle if the video has one. Headline: white caps with a stat from FACTS, under 50 characters, e.g.
