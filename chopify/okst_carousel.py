@@ -4,7 +4,11 @@ Usage:
     doppler run -p okst -c dev -- .venv\\Scripts\\python okst_carousel.py fetch "<instagram post url>" [--handle @name]
     .venv\\Scripts\\python okst_carousel.py inbox "<folder or image files...>" --handle @name [--name <id>]
 
-fetch asks Apify's Instagram Post Scraper for the post (no Instagram login, no cookies).
+fetch asks Apify's Instagram Post Scraper for the post (no Instagram login, no cookies). When Apify fails (a 403 when the
+  Free plan's monthly credit is used up, or any other error), it falls back to yt-dlp: video slides with their audio, image
+  slides from the full size image URL. If that cannot get every slide complete (a slide missing, a video with no audio
+  track, an image only available small), it prints HOLD lines, writes hold.json instead of carousel.json, and exits 4.
+  A partial carousel is never prepared.
   Single video posts and reels print "TYPE video" and stop, so the normal yt-dlp video flow handles them.
   Photo posts and carousels download every slide in order into output\\repost\\<slug>\\.
 inbox copies (never moves) images and videos from OKST-Inbox into output\\repost\\<slug>\\.
@@ -29,9 +33,12 @@ import urllib.request
 from pathlib import Path
 
 from PIL import Image, ImageOps
-import pillow_heif
 
-pillow_heif.register_heif_opener()
+try:                      # HEIC support for inbox photos; App Control blocks it on one PC, the cloud has it
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
 
 ROOT = Path(__file__).resolve().parent
 REPOST_ROOT = ROOT / "output" / "repost"
@@ -43,6 +50,8 @@ VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 MAX_SLIDES = 10                 # Instagram API carousel limit
 MIN_RATIO, MAX_RATIO = 0.75, 1.91  # Instagram feed limits: 3:4 portrait (since May 2025) to 1.91:1 landscape
 VIDEO_MIN_S, VIDEO_MAX_S = 3.0, 60.0
+HOLD_EXIT = 4
+MIN_IMAGE_W = 1000              # yt-dlp fallback: a smaller image means only a preview was available
 
 
 # ---------- helpers ----------
@@ -96,10 +105,14 @@ def unique_path(path):
 
 # ---------- Apify ----------
 
+class ApifyUnavailable(Exception):
+    pass
+
+
 def apify_fetch(url):
     token = os.environ.get("APIFY_TOKEN")
     if not token:
-        sys.exit("APIFY_TOKEN is not set. Run through: doppler run -p okst -c dev -- ...")
+        raise ApifyUnavailable("APIFY_TOKEN is not set")
     body = json.dumps({"username": [url], "dataDetailLevel": "detailedData"}).encode()
     api = f"https://api.apify.com/v2/acts/{APIFY_ACTOR}/run-sync-get-dataset-items?timeout=120"
     last_err = None
@@ -114,7 +127,7 @@ def apify_fetch(url):
             last_err = e
             time.sleep(5)
     else:
-        sys.exit(f"Apify request failed twice: {last_err}")
+        raise ApifyUnavailable(f"Apify request failed twice: {last_err}")
     items = [i for i in items if not i.get("error")]
     if not items:
         sys.exit("Apify returned no post. It may be private, deleted, or age restricted. "
@@ -139,6 +152,134 @@ def slides_from_post(post):
     if post.get("displayUrl"):
         return [{"type": "image", "url": post["displayUrl"]}]
     return []
+
+
+# ---------- yt-dlp fallback ----------
+
+def ytdlp_cmd():
+    try:
+        import yt_dlp  # noqa: F401
+        return [sys.executable, "-m", "yt_dlp"]
+    except ImportError:
+        return ["yt-dlp"]
+
+
+def ytdlp_info(url):
+    """The post as yt-dlp sees it (no login, no cookies). Image slides have no formats, only thumbnails."""
+    err = ""
+    for attempt in range(2):
+        r = subprocess.run(ytdlp_cmd() + ["--skip-download", "--ignore-no-formats-error", "--dump-single-json",
+                                          "--no-warnings", url], capture_output=True, text=True, timeout=240)
+        if r.returncode == 0 and r.stdout.strip():
+            return json.loads(r.stdout)
+        err = (r.stderr.strip().splitlines() or ["no output"])[-1]
+        time.sleep(5)
+    sys.exit(f"Apify failed and yt-dlp could not read the post either: {err}")
+
+
+def ytdlp_slides(info):
+    """(entries, expected count). A single photo post is one entry; a single video post has no entries."""
+    if info.get("_type") == "playlist":
+        entries = [e for e in info.get("entries") or [] if e]
+        return entries, int(info.get("playlist_count") or len(entries))
+    return [info], 1
+
+
+def ytdlp_video(entry, dst, work):
+    """Download one video slide with its audio. Returns (ok, reason)."""
+    meta = work / f"{dst.stem}.yt.json"
+    meta.write_text(json.dumps(entry), encoding="utf-8")
+    r = subprocess.run(ytdlp_cmd() + ["--load-info-json", str(meta), "-f", "bv*+ba/b", "--merge-output-format", "mp4",
+                                      "--no-warnings", "-o", str(dst)], capture_output=True, text=True, timeout=600)
+    if r.returncode != 0 or not dst.exists():
+        return False, "the video would not download: " + ((r.stderr.strip().splitlines() or ["?"])[-1])[:200]
+    kinds = {st.get("codec_type") for st in ffprobe(dst).get("streams", [])}
+    if "video" not in kinds:
+        return False, "the download has no video stream"
+    if "audio" not in kinds:
+        return False, "yt-dlp only got the picture, no audio track"
+    return True, ""
+
+
+def ytdlp_image(entry, dst):
+    """Download one image slide from its full size URL (the last thumbnail). Returns (ok, reason)."""
+    thumbs = [t for t in entry.get("thumbnails") or [] if t.get("url")]
+    if not thumbs:
+        return False, "no image URL"
+    try:
+        dst.write_bytes(http_get(thumbs[-1]["url"], timeout=120))
+        with Image.open(dst) as im:
+            w, h = im.size
+    except Exception as e:
+        return False, f"the image would not download: {e}"[:200]
+    if w < MIN_IMAGE_W:
+        return False, f"only a {w}x{h} preview was available"
+    return True, ""
+
+
+def hold(out_dir, url, reasons):
+    for r in reasons:
+        print(f"HOLD {r}")
+    (out_dir / "hold.json").write_text(json.dumps({"source": url, "fetched_with": "yt-dlp (Apify unavailable)",
+                                                   "reasons": reasons}, indent=2), encoding="utf-8")
+    print(f"FOLDER {out_dir}")
+    sys.exit(HOLD_EXIT)
+
+
+def fetch_with_ytdlp(url, given, apify_error):
+    print(f"APIFY_FAILED {apify_error}. Falling back to yt-dlp.")
+    info = ytdlp_info(url)
+    owner = info.get("channel") or ""
+    if given and owner and given.lower() != owner.lower():
+        print(f"HANDLE_CONFLICT post owner @{owner} vs given @{given}")
+    creator = given or owner
+    if not creator:
+        sys.exit("No creator handle found. Rerun with --handle @name.")
+    code = shortcode_from_url(url)
+    playlist = info.get("_type") == "playlist"
+    if not playlist and info.get("formats"):
+        print(f"POST Video by @{owner or '?'} ({code})")
+        print("TYPE video")
+        return
+    print(f"POST {'Sidecar' if playlist else 'Image'} by @{owner or '?'} ({code})")
+    entries, expected = ytdlp_slides(info)
+
+    slug = slugify(f"repost-{creator}-{code}")
+    out_dir = REPOST_ROOT / slug
+    raw_dir = out_dir / "source"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"url": url, "shortCode": code, "type": "Sidecar" if playlist else "Image",
+            "caption": info.get("description"), "ownerUsername": owner, "ownerFullName": info.get("uploader"),
+            "timestamp": info.get("timestamp"), "fetched_with": "yt-dlp (Apify unavailable)",
+            "taggedUsers": None, "coauthors": None, "note": "yt-dlp does not list tagged users or coauthors"}
+    (out_dir / f"{code}.info.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    reasons = []
+    if len(entries) != expected:
+        reasons.append(f"the post has {expected} slides but yt-dlp listed {len(entries)}")
+    raw = []
+    for n, e in enumerate(entries, start=1):
+        if e.get("formats"):
+            dst, kind = raw_dir / f"{code}_{n:02d}.mp4", "video"
+            ok, why = (True, "") if dst.exists() else ytdlp_video(e, dst, raw_dir)
+        else:
+            dst, kind = raw_dir / f"{code}_{n:02d}.jpg", "image"
+            ok, why = (True, "") if dst.exists() else ytdlp_image(e, dst)
+        if not ok:
+            reasons.append(f"slide {n} ({kind}): {why}")
+            dst.unlink(missing_ok=True)
+        raw.append((dst, kind))
+    if not raw:
+        reasons.append("no slides")
+    if reasons:
+        hold(out_dir, url, reasons)
+
+    slides = build_slides(raw, out_dir, slug)
+    manifest = write_manifest(out_dir, slug, url, creator, slides,
+                              {"info_json": f"{code}.info.json", "owner": owner, "fetched_with": "yt-dlp"})
+    manifest["flags"].append("Fetched with yt-dlp because Apify failed: tagged users and coauthors were not checked.")
+    (out_dir / "carousel.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    report(out_dir, manifest)
 
 
 # ---------- preparing slides ----------
@@ -246,9 +387,12 @@ def report(out_dir, manifest):
 
 def cmd_fetch(args):
     url = clean_ig_url(args.url)
-    post = apify_fetch(url)
-    owner = post.get("ownerUsername") or ""
     given = (args.handle or "").lstrip("@")
+    try:
+        post = apify_fetch(url)
+    except ApifyUnavailable as e:
+        return fetch_with_ytdlp(url, given, e)
+    owner = post.get("ownerUsername") or ""
     if given and owner and given.lower() != owner.lower():
         print(f"HANDLE_CONFLICT post owner @{owner} vs given @{given}")
     creator = given or owner

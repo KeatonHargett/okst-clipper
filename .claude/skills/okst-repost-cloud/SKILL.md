@@ -94,6 +94,10 @@ these parts of the normal flow, everything else stays the same:
 ## Routing
 - Instagram: `doppler run -p okst -c dev -- python okst_carousel.py fetch "<URL>" [--handle @handle]`.
   TYPE video: Steps 1 to 9 (download with yt-dlp as in step 1). TYPE carousel: CAROUSEL.
+  APIFY_FAILED means Apify is out (usually the Free plan's monthly credit) and the script fell back to yt-dlp by itself;
+  say so in REPORT. Exit 4 with HOLD lines: the carousel could not be fetched complete (a slide missing, a video with no
+  audio, an image only available small). Hold with those reasons; never build, trim, or ship a partial carousel yourself.
+  Never call Apify any other way: okst_carousel.py fetch is the only Apify use the automation is allowed.
 - X (x.com, twitter.com): `python okst_xcard.py fetch "<URL>" [--handle @handle]` (dark theme). TYPE video: FILE is the mp4;
   skip Steps 1, 3, 4. TYPE carousel: CAROUSEL from C2. If it fails on a video post, try Steps 1 to 9 on the bare video.
 - TikTok, YouTube: Steps 1 to 9. A TikTok /photo/ link that yt-dlp cannot read: hold, and in REPORT tell Keaton to save the
