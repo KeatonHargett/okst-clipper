@@ -18,9 +18,9 @@ HOLD FOLDER: "G:\My Drive\OKST-Hold\<video-slug>\"
 Everything posts straight to Instagram through the API, the moment it ships: clips as Reels (shared to the feed),
 carousels and single photos as posts. The same ig_publish.py run then posts it to the OKSTProbs Facebook Page
 (FB Reel, or a Page video when over 90s or not 9:16; photo or multi photo post for carousels; video slides stay
-Instagram only). Instagram never auto shares API posts to Facebook. Repurpose's Instagram flow still handles TikTok
-and Snapchat. Nothing goes to "G:\My Drive\OKST-Clips" anymore (that was Repurpose's Drive watch
-folder; it auto posts, so never put anything there).
+Instagram only). Instagram never auto shares API posts to Facebook. Instagram and Facebook are the only places anything
+posts, both through ig_publish.py. Nothing goes to "G:\My Drive\OKST-Clips" anymore (an old, retired folder; never
+put anything there).
 
 CAROUSELS: if the REVIEW FOLDER has a carousel.json, follow CAROUSEL SHIP below instead of Steps.
 
@@ -50,8 +50,7 @@ Flags (rights, credit, watermarks) never stop a ship; just list them in the repo
    files, all .draft.txt files, and review.html) to the HOLD FOLDER (create it if missing). If a post failed, leave the rest in
    the REVIEW FOLDER so the retry command works.
 8. Report each posted clip with its Instagram permalink and its Facebook link (the FACEBOOK line, also in published.json),
-   what moved where, and anything that did not post and why. Mention that Repurpose then copies each new Instagram post
-   to TikTok and Snapchat on its own schedule.
+   what moved where, and anything that did not post and why.
    End with clickable links to the POSTED FOLDER and the HOLD FOLDER.
 
 ## CAROUSEL SHIP
@@ -83,6 +82,6 @@ use forward slashes and encode spaces as %20 (also # as %23 and % as %25). For e
 ## Rules
 Never delete anything.
 Never overwrite files.
-Never log into Instagram, Meta, or Repurpose (token refreshes above are the only exception).
+Never log into Instagram or Meta (token refreshes above are the only exception).
 Never post a .draft.txt caption.
 Never copy or move anything to "G:\My Drive\OKST-Clips".
