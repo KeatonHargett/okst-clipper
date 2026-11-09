@@ -19,7 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - uses: dopplerhq/cli-action@v3
+      - name: Doppler CLI (retries; dopplerhq/cli-action timed out at 30 s)
+        run: bash cloud/install_doppler.sh
       - run: pip install -q -U "yt-dlp[default,curl-cffi]"
       - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
         run: bash cloud/setup_warp.sh

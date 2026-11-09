@@ -65,8 +65,9 @@ jobs:
       - uses: actions/setup-python@v5
         if: steps.link.outputs.repeat != 'true'
         with: { python-version: "3.12" }
-      - uses: dopplerhq/cli-action@v3
+      - name: Doppler CLI (retries; dopplerhq/cli-action timed out at 30 s)
         if: steps.link.outputs.repeat != 'true'
+        run: bash cloud/install_doppler.sh
       - name: Whisper model cache
         if: steps.link.outputs.repeat != 'true'
         uses: actions/cache@v4
@@ -82,10 +83,7 @@ jobs:
           which google-chrome
       - name: Mask secrets and load the Claude token
         if: steps.link.outputs.repeat != 'true'
-        run: |
-          doppler secrets download -p okst -c dev --no-file --format json \
-            | python -c "import sys,json;[print('::add-mask::'+l) for v in json.load(sys.stdin).values() for l in str(v).splitlines() if len(l)>5]"
-          echo "CLAUDE_CODE_OAUTH_TOKEN=$(doppler secrets get CLAUDE_CODE_OAUTH_TOKEN -p okst -c dev --plain)" >> "$GITHUB_ENV"
+        run: bash cloud/load_claude_token.sh
       - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
         if: steps.link.outputs.repeat != 'true' && (steps.link.outputs.platform == 'tiktok' || steps.link.outputs.platform == 'youtube')
         run: bash cloud/setup_warp.sh
@@ -103,8 +101,9 @@ jobs:
           [ "${{ inputs.highlight }}" = "true" ] && args="$args highlight=$GAME"
           claude -p "/okst-repost-cloud $args" \
             --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" --model claude-opus-5-5 \
-            --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || echo "claude exited $?"
-          python -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1]) if l.strip()];f=[x for x in r if x.get('type')=='result'];print(f[-1].get('result','')[:3000] if f else 'no result')" "$RUNNER_TEMP/claude.jsonl"
+            --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || rc=$?
+          echo "claude exited ${rc:-0}"
+          python3 cloud/claude_result.py "$RUNNER_TEMP/claude.jsonl" "$RUNNER_TEMP/claude.err" "${rc:-0}"
       - name: Copyright stop (highlights)
         if: always() && inputs.highlight
         env: { GH_TOKEN: "${{ github.token }}" }
