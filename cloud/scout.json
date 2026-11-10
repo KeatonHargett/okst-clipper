@@ -2,6 +2,9 @@
   "_about": "Sources for cloud/scout.py. Add creators here to watch them. osu_only: every post is about OSU, so skip the keyword check.",
   "tiktok_hashtags": ["okstate", "gopokes", "okstatefootball", "oklahomastate", "okstatebasketball", "okstatewrestling", "okstatesoftball", "okstatebaseball", "stillwater", "stilly", "stillwateroklahoma", "stillyoklahoma", "stillwaterok", "stillyok", "drewmestemaker", "zesty4mesty", "mestemaker"],
   "tiktok_min_views": 3000,
+  "_low_tags": "Local and player hashtags with fewer posts: these use low_tags_min_views instead of tiktok_min_views.",
+  "low_tags": ["stillwater", "stilly", "stillwateroklahoma", "stillyoklahoma", "stillwaterok", "stillyok", "drewmestemaker", "zesty4mesty", "mestemaker"],
+  "low_tags_min_views": 500,
   "_pros": "Former Cowboys and Cowgirls now playing pro, watched by name hashtag on TikTok. Sources: okstate.com alumni updates 2025, Big 12 MLB Opening Day 2026, Big 12 AUSL opening day 2026. Rosters change: edit freely.",
   "pros_min_views": 25000,
   "pros": [

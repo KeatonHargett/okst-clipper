@@ -141,7 +141,9 @@ def collect():
     # dicts: key, url, who, when (epoch or None), text, score, osu_only, src (source name), min_views (optional)
     cands = []
     # OSU hashtags, then each former Cowboy now in the pros by name hashtag (busier tags, so a higher view bar)
-    tags = [(t, f"tt-tag:{t}", CFG.get("tiktok_min_views", 0)) for t in CFG.get("tiktok_hashtags", [])]
+    low = {x.lower() for x in CFG.get("low_tags", [])}
+    tags = [(t, f"tt-tag:{t}", CFG.get("low_tags_min_views", 500) if t.lower() in low else CFG.get("tiktok_min_views", 0))
+            for t in CFG.get("tiktok_hashtags", [])]
     tags += [(p["tag"], f"tt-pro:{p['tag']}", CFG.get("pros_min_views", 25000)) for p in CFG.get("pros", [])]
     for tag, src_name, min_views in tags:
         found = tikwm("challenge/search", keywords=tag, count=5).get("challenge_list") or []
