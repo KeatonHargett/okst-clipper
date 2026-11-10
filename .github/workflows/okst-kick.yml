@@ -7,6 +7,9 @@ name: okst-kick
 # ended (cloud/games.py due), once per game.
 # Runs chain: the queued run starts when this one ends, so the timer keeps itself alive.
 # A watchdog runs every 6 hours and restarts the chain if nothing is queued or running.
+# From 11 am to 7 pm Central each loop also starts bar-meme-cards/bar-meme-post (mode post) through GH_DISPATCH_TOKEN in
+# Doppler okst/dev, because GitHub's cron on that private repo fires only every 4 to 10 hours and its bars' slots
+# (Coney 11:30, Murphy's 16:00, Outlaws 17:00, each good for 3 hours) kept falling between runs.
 on:
   schedule:
     - cron: "17 */6 * * *"
@@ -41,13 +44,33 @@ jobs:
     timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
+      - name: Doppler CLI (for the bar-meme-post dispatch token)
+        env: { DOPPLER_TOKEN: "${{ secrets.DOPPLER_TOKEN }}" }
+        run: bash cloud/install_doppler.sh || echo "::warning::Doppler install failed, bar posts will not be kicked this run"
       - name: Queue the next kick run
         if: ${{ inputs.chain }}
         env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
         run: gh workflow run okst-kick.yml && echo "next kick run queued"
-      - name: Start the scout every 30 minutes (7 am to 11 pm Central) and the watch (9 am to midnight Central)
-        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
+      - name: Start the scout every 30 minutes (7 am to 11 pm Central), the watch (9 am to midnight Central) and the bar posts (11 am to 7 pm Central)
+        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}", DOPPLER_TOKEN: "${{ secrets.DOPPLER_TOKEN }}" }
         run: |
+          BAR_TOK=$(doppler secrets get GH_DISPATCH_TOKEN --plain 2>/dev/null || true)
+          if [ -n "$BAR_TOK" ]; then echo "::add-mask::$BAR_TOK"; else echo "::warning::GH_DISPATCH_TOKEN not readable, bar posts will not be kicked this run"; fi
+          start_bar_posts() {
+            # bar-meme-cards/bar-meme-post, mode post: it publishes only when a bar's slot is due, so an extra start is cheap
+            # (under a minute of that private repo's Actions minutes). Skip when a run started in the last 25 minutes.
+            [ -n "$BAR_TOK" ] || return 0
+            local api="https://api.github.com/repos/KeatonHargett/bar-meme-cards/actions/workflows/bar-meme-post.yml"
+            local hdr=(-H "Authorization: Bearer $BAR_TOK" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+            local created age code
+            created=$(curl -sf "${hdr[@]}" "$api/runs?per_page=1" | python3 -c 'import sys,json;r=json.load(sys.stdin)["workflow_runs"];print(r[0]["created_at"] if r else "")') || created=""
+            if [ -n "$created" ]; then
+              age=$(( $(date +%s) - $(date -d "$created" +%s) ))
+              if [ "$age" -lt 1500 ]; then echo "$(TZ=America/Chicago date +%H:%M) bar posts skipped, last run started $((age / 60)) min ago"; return 0; fi
+            fi
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${hdr[@]}" "$api/dispatches" -d '{"ref":"main","inputs":{"mode":"post"}}')
+            if [ "$code" = "204" ]; then echo "$(TZ=America/Chicago date +%H:%M) bar posts started"; else echo "::warning::bar posts start failed (HTTP $code)"; fi
+          }
           start_watch() {
             # At most one okst-watch start per 30 minutes, counting its own cron runs and any other kick run.
             local last created status age
@@ -88,5 +111,6 @@ jobs:
               echo "$(TZ=America/Chicago date +%H:%M) quiet hours, skipped"
             fi
             if [ "$h" -ge 9 ]; then start_watch; fi
+            if [ "$h" -ge 11 ] && [ "$h" -le 19 ]; then start_bar_posts; fi
             if [ "$i" -lt "${{ inputs.loops }}" ]; then sleep 1800; fi
           done
