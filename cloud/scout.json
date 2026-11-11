@@ -1,7 +1,7 @@
 {
   "_about": "Sources for cloud/scout.py. Add creators here to watch them. osu_only: every post is about OSU, so skip the keyword check.",
   "tiktok_hashtags": ["okstate", "gopokes", "okstatefootball", "oklahomastate", "okstatebasketball", "okstatewrestling", "okstatesoftball", "okstatebaseball", "stillwater", "stilly", "stillwateroklahoma", "stillyoklahoma", "stillwaterok", "stillyok", "drewmestemaker", "zesty4mesty", "mestemaker"],
-  "tiktok_min_views": 3000,
+  "tiktok_min_views": 500,
   "_low_tags": "Local and player hashtags with fewer posts: these use low_tags_min_views instead of tiktok_min_views.",
   "low_tags": ["stillwater", "stilly", "stillwateroklahoma", "stillyoklahoma", "stillwaterok", "stillyok", "drewmestemaker", "zesty4mesty", "mestemaker"],
   "low_tags_min_views": 500,
