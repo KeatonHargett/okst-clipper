@@ -51,6 +51,14 @@ have looked at the frames, transcript, and caption, decide POST or SKIP:
 - When unsure, SKIP. A skipped post costs nothing; a bad post costs reach.
 On SKIP: write TITLE as `Skipped: @handle <one line reason>` (it must start with `Skipped`), write a short REPORT, ship
 nothing, and stop. On POST: continue exactly as below and add "auto": true to the LOG line. Never ask anything.
+TRIAL REELS (Keaton, 2026-11-14): an AUTO Reel that will still be worth watching in 3 days ships as a Trial Reel: add
+`--trial` to the step 9 ig_publish.py --reel command. Instagram shows it to non-followers first and shares it with
+followers on its own if it does well (graduation SS_PERFORMANCE), so it grows the account and tests the hook on fresh
+viewers. Evergreen: throwback edits, player features and film breakdowns, crowd and stadium moments, hype edits, former
+Cowboys' standout plays. NOT trial (timely, followers must see it now): game day or a result from the last 3 days, news,
+injuries, signings, rankings, transfers, anything tied to a date this week. When unsure, no trial. Never trial a
+carousel or photo, a share Keaton sent himself (no `auto`), a HIGHLIGHT, or an okst-clip. Say "Trial Reel" in REPORT
+and add "trial": true to the LOG line.
 
 ## HIGHLIGHT (the input has `highlight=<sport>:<event>`: okst-highlights sent a network, league, or OSU account's clip)
 okst-highlights picked this video as the best play of a finished Oklahoma State game; Keaton approved posting it. It overrides
@@ -138,7 +146,8 @@ these parts of the normal flow, everything else stays the same:
 8. STAGE: copy the mp4 and .txt to STAGE, then `python make_review_page.py "<STAGE>" --flags "<LOCAL OUTPUT>/review-flags.json" --no-open`.
 9. SHIP (unless hold or an open question): check the caption (#OKState first of exactly 5 hashtags, no hyphens or dashes, a
    blank line between parts and right before the hashtags), then once:
-   `doppler run -p okst -c dev -- python ig_publish.py --reel "<STAGE>/<mp4>"`.
+   `doppler run -p okst -c dev -- python ig_publish.py --reel "<STAGE>/<mp4>"` (plus `--trial` for an evergreen AUTO
+   Reel, see TRIAL REELS).
    DAILY LIMIT: if publishing fails with Instagram's Content Publishing API limit ("maximum number of posts", code 9 or
    2207042), nothing went out. Append {"url": "<URL>", "auto": <true if auto else false>, "date": "<YYYY-MM-DD>"} to
    $GITHUB_WORKSPACE/state/pending.jsonl, write TITLE `Waiting: @handle (Instagram daily limit, ships when it resets)`,

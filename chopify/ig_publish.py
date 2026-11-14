@@ -690,8 +690,15 @@ def cmd_verify(media_id):
     print(f"OK {m.get('permalink')}")
 
 
-def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_rights=False):
-    """Publish one mp4 as a Reel (shared to the feed). Caption is the .txt with the same base name."""
+TRIAL_STRATEGIES = ("SS_PERFORMANCE", "MANUAL")
+
+
+def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_rights=False, trial=None):
+    """Publish one mp4 as a Reel (shared to the feed). Caption is the .txt with the same base name.
+
+    trial: "SS_PERFORMANCE" or "MANUAL" makes it a Trial Reel (Instagram shows it to non-followers first; it stays off
+    the profile grid and followers' feeds until it graduates; SS_PERFORMANCE graduates on its own when it does well).
+    If Instagram refuses trial_params, the Reel posts normally with a WARNING. Facebook gets it right away either way."""
     mp4 = mp4.resolve()
     done = mp4.with_name(mp4.stem + ".published.json")
     if fb_only:
@@ -708,7 +715,8 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
         ig = me["user_id"]
         print(f"Account: @{me['username']}  Reel: {mp4.name} {info['width']}x{info['height']} "
               f"{info['duration']:.1f}s{'' if info['audio'] else ' (no audio)'}  Caption: {len(caption)} chars  "
-              f"Location: {location['name'] if location else 'none'}  Cover: {cover.name if cover else 'none'}")
+              f"Location: {location['name'] if location else 'none'}  Cover: {cover.name if cover else 'none'}"
+              f"{'  TRIAL REEL (' + trial + ')' if trial else ''}")
     if (fb or fb_only) and not stage_only:
         print(f"Facebook Page: {fb_status()}")
     if dry_run:
@@ -723,8 +731,19 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
         urls = host_slides(mp4.parent, [{"file": mp4.name}] + ([{"file": cover.name}] if cover else []))
         print("Video hosted. Instagram is processing the Reel...")
         extra = {"cover_url": urls[cover.name]} if cover else {}
-        c = create_container(f"{ig}/media", token, location, media_type="REELS", video_url=urls[mp4.name],
-                             caption=caption, share_to_feed="true", **extra)
+        if trial:
+            try:
+                c = create_container(f"{ig}/media", token, location, media_type="REELS", video_url=urls[mp4.name],
+                                     caption=caption, share_to_feed="true",
+                                     trial_params=json.dumps({"graduation_strategy": trial}), **extra)
+            except ApiError as e:
+                if "trial" not in str(e).lower() and "graduation" not in str(e).lower():
+                    raise
+                print(f"WARNING: Instagram refused the Trial Reel ({e}); posting it as a normal Reel.")
+                trial = None
+        if not trial:
+            c = create_container(f"{ig}/media", token, location, media_type="REELS", video_url=urls[mp4.name],
+                                 caption=caption, share_to_feed="true", **extra)
         wait_ready(c, token, "Reel", timeout_s=900)
         if stage_only:
             print(f"STAGED container {c}: Instagram accepted and processed the video. Not published.")
@@ -735,9 +754,10 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
             "media_id": media_id, "permalink": permalink, "account": me["username"],
             "published_at": dt.datetime.now(dt.timezone.utc).isoformat(), "file": mp4.name,
             "cover": cover.name if cover else None,
-            "location": location.get("name") if location else None}, indent=2),
+            "location": location.get("name") if location else None, "trial": trial}, indent=2),
             encoding="utf-8")
-        print(f"PUBLISHED {permalink}")
+        print(f"PUBLISHED {permalink}" + (f" as a TRIAL REEL ({trial}): non-followers first, off the grid until it "
+                                         "graduates" if trial else ""))
         if fb:
             fb_share(done, lambda t: fb_video(mp4, caption, info, t))
             err = json.loads(done.read_text(encoding="utf-8")).get("facebook_error") or ""
@@ -786,7 +806,12 @@ def main():
     ap.add_argument("--verify", metavar="MEDIA_ID", help="Check a published post is still up (exit 3 if removed)")
     ap.add_argument("--fb-only", action="store_true",
                     help="Post an item already on Instagram to the Facebook Page only (retry after a Facebook failure)")
+    ap.add_argument("--trial", nargs="?", const="SS_PERFORMANCE", choices=TRIAL_STRATEGIES,
+                    help="With --reel: post as a Trial Reel (non-followers first). Default graduation SS_PERFORMANCE "
+                         "(Instagram shares it to followers when it performs well); MANUAL never graduates on its own")
     args = ap.parse_args()
+    if args.trial and not args.reel:
+        ap.error("--trial works only with --reel (Instagram has Trial Reels, not trial photos or carousels)")
     if args.fb_only and (args.no_fb or args.stage_only):
         ap.error("--fb-only cannot be combined with --no-fb or --stage-only")
     try:
@@ -798,7 +823,7 @@ def main():
             cmd_check(args.refresh)
         elif args.reel:
             cmd_reel(Path(args.reel), args.dry_run, args.stage_only, not args.no_fb, args.fb_only,
-                     args.strict_rights)
+                     args.strict_rights, args.trial)
         elif args.folder:
             cmd_publish(Path(args.folder), args.dry_run, not args.no_fb, args.fb_only)
         else:
