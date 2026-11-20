@@ -159,7 +159,14 @@ def collect():
         if not cid:
             log(f"  TikTok #{tag}: hashtag not found")
             continue
-        for v in tikwm("challenge/posts", challenge_id=cid, count=30, cursor=0).get("videos") or []:
+        vids, cursor = [], 0
+        for _ in range(CFG.get("tiktok_pages", 1)):   # each page is ~30 posts; deeper pages reach more recent ones
+            d = tikwm("challenge/posts", challenge_id=cid, count=30, cursor=cursor)
+            vids += d.get("videos") or []
+            cursor = d.get("cursor")
+            if not cursor or not d.get("videos"):
+                break
+        for v in vids:
             user = (v.get("author") or {}).get("unique_id") or ""
             vid = str(v.get("video_id") or "")
             if not user or not vid:
@@ -176,14 +183,20 @@ def collect():
             cands.append({"key": f"tt:{vid}", "url": f"https://www.tiktok.com/@{user}/video/{vid}", "who": user,
                           "when": v.get("timestamp"), "text": f"{v.get('title') or ''} {v.get('description') or ''}",
                           "score": v.get("view_count") or 0, "osu_only": src.get("osu_only", False), "src": f"tt:{user}"})
-    for src in CFG.get("instagram", []):
+    ig_srcs = CFG.get("instagram", [])
+    k = CFG.get("instagram_per_run")   # rotate: Business Discovery shares the Meta app's hourly request limit
+    if k and len(ig_srcs) > k:
+        start = (int(NOW // 1800) * k) % len(ig_srcs)
+        ig_srcs = (ig_srcs + ig_srcs)[start:start + k]
+    for src in ig_srcs:
         user = src["user"]
         d = graph(IG_ID, fields=f"business_discovery.username({user})"
                                 "{media.limit(8){id,caption,media_type,permalink,timestamp,like_count,comments_count}}")
         for m in (d.get("business_discovery", {}).get("media", {}).get("data") or []):
             cands.append({"key": f"ig:{m['id']}", "url": m.get("permalink"), "who": user, "when": ig_time(m.get("timestamp", "")),
                           "text": m.get("caption") or "", "score": (m.get("like_count") or 0) * 20,
-                          "osu_only": src.get("osu_only", False), "src": f"ig:{user}"})
+                          "osu_only": src.get("osu_only", False), "src": f"ig:{user}",
+                          "min_views": CFG.get("instagram_min_likes", 0) * 20})
     if CFG.get("instagram_tags"):
         d = graph(f"{IG_ID}/tags", fields="id,caption,media_type,permalink,timestamp,username,like_count", limit=25)
         for m in d.get("data") or []:

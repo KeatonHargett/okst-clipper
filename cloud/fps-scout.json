@@ -10,8 +10,8 @@
   "off_file": "state/fps/off",
   "topic_filter": false,
   "roster": false,
-  "daily_cap": 12,
-  "per_run": 2,
+  "daily_cap": 30,
+  "per_run": 3,
   "ig_daily_limit": 50,
   "ig_keep_free": 4,
   "max_age_hours": 72,
@@ -34,20 +34,115 @@
     "golf",
     "golftiktok",
     "baseball",
-    "mlb"
+    "mlb",
+    "trickshot",
+    "sportsfails"
   ],
-  "tiktok_min_views": 150000,
+  "tiktok_min_views": 75000,
   "_low_tags": "Smaller tags use low_tags_min_views instead.",
   "low_tags": [
-    "secfootball",
     "big12",
-    "tailgate",
+    "collegebasketball",
     "collegefootballtiktok",
     "golftiktok",
-    "collegebasketball"
+    "secfootball",
+    "sportsfails",
+    "tailgate",
+    "trickshot"
   ],
-  "low_tags_min_views": 50000,
-  "instagram": [],
+  "low_tags_min_views": 25000,
+  "instagram": [
+    {
+      "user": "dylan.talksball"
+    },
+    {
+      "user": "whristan"
+    },
+    {
+      "user": "annieagar5"
+    },
+    {
+      "user": "abtw.yt"
+    },
+    {
+      "user": "big_b0j0"
+    },
+    {
+      "user": "thedrewallen_"
+    },
+    {
+      "user": "coach.pickle"
+    },
+    {
+      "user": "the_backyard_golf_club"
+    },
+    {
+      "user": "wegoticebaseball"
+    },
+    {
+      "user": "chipoverseas"
+    },
+    {
+      "user": "bigggjenk"
+    },
+    {
+      "user": "allhailbball"
+    },
+    {
+      "user": "zetfaryt"
+    },
+    {
+      "user": "thetrickshotqueen"
+    },
+    {
+      "user": "sportingmentality"
+    },
+    {
+      "user": "thefiveoclockhitter"
+    },
+    {
+      "user": "firstrytrickshot"
+    },
+    {
+      "user": "ourroadtotheshow"
+    },
+    {
+      "user": "allenortiz24"
+    },
+    {
+      "user": "theqbplug"
+    },
+    {
+      "user": "dudeperfect"
+    },
+    {
+      "user": "hydracam"
+    },
+    {
+      "user": "jakethejuice"
+    },
+    {
+      "user": "rossitakes"
+    },
+    {
+      "user": "theeblackbadger"
+    },
+    {
+      "user": "trixshot"
+    },
+    {
+      "user": "thatll.work"
+    },
+    {
+      "user": "martinborgmeier"
+    },
+    {
+      "user": "wints.exe"
+    },
+    {
+      "user": "sports_multiverse_nfl"
+    }
+  ],
   "instagram_tags": true,
   "youtube_queries": [
     "college football funny",
@@ -144,7 +239,16 @@
     "nbaonespn",
     "mariners",
     "timberwolves",
-    "whistle"
+    "whistle",
+    "fallontonight",
+    "europeanathletics",
+    "gdfactoryclips"
   ],
-  "_block_teams": "Team accounts are too many to list; the AUTO rules in the skill also skip any team, league, or network's own upload."
+  "_block_teams": "Team accounts are too many to list; the AUTO rules in the skill also skip any team, league, or network's own upload.",
+  "_daily_cap": "30 for the first week live (from 2026-11-20), then 45. Instagram refuses API posts past 50 in 24 hours.",
+  "tiktok_pages": 2,
+  "_instagram": "Creator accounts picked 2026-11-20 from authors of 50k+ view sports TikToks that have a matching Instagram business account, ranked by posts in 3 days and median likes. A post must reach instagram_min_likes likes.",
+  "instagram_min_likes": 1500,
+  "instagram_per_run": 6,
+  "_instagram_per_run": "Each run checks 6 accounts in rotation (all 30 every ~2.5 h). The Keaton Social Assistant app's hourly request limit is shared with OKST and the bars; checking all 30 every run would risk it."
 }

@@ -1,7 +1,7 @@
 name: fps-repost
 # Front Porch Sports: started by fps-scout (auto=true) or Actions > fps-repost > Run workflow with a link.
 # Reposts Barstool style to Instagram @frontporchsports and the Front Porch Sports Facebook Page
-# (.claude/skills/fps-repost-cloud). A copyright or rights error writes state/fps/off, which stops fps-scout.
+# (.claude/skills/fps-repost-cloud) on Sonnet, so 60 to 100 runs a day stay inside the shared Claude plan limits. A copyright or rights error writes state/fps/off, which stops fps-scout.
 on:
   workflow_dispatch:
     inputs:
@@ -90,7 +90,7 @@ jobs:
           [ "${{ inputs.hold }}" = "true" ] && args="$args hold"
           [ "${{ inputs.auto }}" = "true" ] && args="$args auto"
           claude -p "/fps-repost-cloud $args" \
-            --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" --model claude-opus-5-5 \
+            --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" --model claude-sonnet-5-5 \
             --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || rc=$?
           echo "claude exited ${rc:-0}"
           python3 cloud/claude_result.py "$RUNNER_TEMP/claude.jsonl" "$RUNNER_TEMP/claude.err" "${rc:-0}"
