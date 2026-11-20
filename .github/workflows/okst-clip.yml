@@ -38,8 +38,20 @@ jobs:
         run: |
           id=$(python -m yt_dlp --print id "${{ inputs.url }}")
           mkdir -p "chopify/work/$id"
-          python -m yt_dlp -f "bestvideo*+bestaudio/best" -S "vcodec:h264,res:1080,acodec:m4a" -N 4 \
-            --merge-output-format mp4 --no-playlist -o "chopify/work/$id/source.%(ext)s" "${{ inputs.url }}"
+          # YouTube sometimes answers 403 or a bot check on the cloud IP for one client: retry with other clients
+          # (2026-11-20: the 11-17 presser failed with "HTTP Error 403: Forbidden" on the default client).
+          ok=""
+          for client in "" "tv,web_safari" "mweb" "web_embedded,tv"; do
+            extra=(); [ -n "$client" ] && extra=(--extractor-args "youtube:player_client=$client")
+            if python -m yt_dlp -f "bestvideo*+bestaudio/best" -S "vcodec:h264,res:1080,acodec:m4a" -N 4 \
+                 --retries 10 --fragment-retries 10 "${extra[@]}" \
+                 --merge-output-format mp4 --no-playlist -o "chopify/work/$id/source.%(ext)s" "${{ inputs.url }}"; then
+              ok=1; break
+            fi
+            echo "::warning::download failed with player_client='${client:-default}', trying the next one"
+            rm -f "chopify/work/$id"/source.*; sleep 20
+          done
+          [ -n "$ok" ] || { echo "::error::YouTube refused every download method"; exit 1; }
           ls -la "chopify/work/$id"
       - name: Clip and ship (Claude)
         run: |

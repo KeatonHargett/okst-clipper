@@ -30,12 +30,26 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
 0. Guards (any failure: write the reason in REPORT and stop):
    a. Title and description: `python -m yt_dlp --skip-download --print "%(title)s|%(channel)s|%(upload_date)s" --print description "<URL>"`.
       The channel must be Oklahoma State Athletics, Pistols Firing, or The Daily O'Collegian (okst-watch queues all three; see
-      cloud/watch.py). Any other channel: stop. For Pistols Firing or O'Collegian footage:
+      cloud/watch.py) or one of the PODCASTS channels below. Any other channel: stop. For Pistols Firing or O'Collegian footage:
       - Every caption gets a credit line right above the hashtags: `🎥 Pistols Firing` or `🎥 The Daily O'Collegian`.
       - Duplicate check (0c) matters more: the same session may already be posted from the official channel.
       - Player sessions are short (1 to 6 min): 1 to 3 clips is fine; skip the video (stop with the reason) when nobody says
         anything worth a clip (no opinion, emotion, praise, or quotable line).
       - The sport comes from the title, the description and the speaker (okstate.com rosters); never guess it.
+      PODCASTS (okst-watch also queues these shows; the channel check above also accepts Locked On Oklahoma State,
+      CC TV - Carson Cunningham for the Pistols Firing Podcast, and Oklahoma State Athletics' Inside OSU Athletics and
+      Cowgirls IRL episodes):
+      - Credit line right above the hashtags: `🎥 Locked On Oklahoma State`, `🎥 Pistols Firing Podcast`,
+        `🎥 The Reload (Pistols Firing)`, `🎥 Inside OSU Athletics` or `🎥 Cowgirls IRL`.
+      - Pick only 1 or 2 clips per episode: the strongest Oklahoma State take, prediction, story or guest moment, 20 to 60 s,
+        understandable without the rest of the show. Skip segments about other schools, ads, reads, and housekeeping.
+        Nothing strong enough: stop and say so in REPORT (that is a fine outcome).
+      - Speaker names: hosts and guests from the title, the description and what they say on air (e.g. "Carson Cunningham",
+        the Locked On host named in the description). A name you cannot confirm stays out of the caption.
+      - Opinions are the host's, not facts: line 2 says who said it ("Carson Cunningham on why ..."). Never present a
+        prediction or rumor as news.
+      - No highlights split (step 2e) for podcasts. Multi-camera or side-by-side layouts: use the speaker crop (2d).
+      - Long episodes (over 60 min): use the transcript to find the 2 best moments; don't watch more frames than needed.
    b. Daily cap: count POST LOG lines whose "date" is today in America/Chicago. At 6 or more, ship nothing today (hold everything).
    c. Duplicate check: `doppler run -p okst -c dev -- python ../cloud/ig_recent.py` prints the latest Instagram captions.
       If a recent caption is clearly from this same press conference (same person, same day, same opponent), Keaton already

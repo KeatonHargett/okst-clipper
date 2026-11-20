@@ -8,6 +8,11 @@ Sources, in priority order:
   3. The Daily O'Collegian: occasional basketball/football press conferences.
 A secondary-source video is skipped when the official channel already has the same person on the same date.
 
+Podcasts (kind "podcast", added 2026-11-20; clips carry a "🎥 <show>" credit):
+  - Inside OSU Athletics (official, incl. Cowgirls IRL), Locked On Oklahoma State, Pistols Firing Podcast (CC TV - Carson
+    Cunningham channel), The Reload (Pistols Firing channel). Every episode over 5 minutes whose title fits the show.
+  - A show listed for the first time is seeded (its back catalog marked seen), so only new episodes are queued.
+
 Rules:
 - Scheduled or still-live streams are left out of state/seen.json until they end, so a later run queues them (2026-11-20:
   three pressers were queued while still "This live event will begin in N minutes" and never clipped).
@@ -23,12 +28,27 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 CHI = ZoneInfo("America/Chicago")
+OSU, PF, LO, CC = ("UCiPbE1TBmEfgUWcQJUztxrQ", "UCCuruNGNiEZlivs5e2ptFfw", "UCJ2Sagc-dj4Fnya4itFOZIw",
+                   "UC0xwjPmRH3Zwe0_MbtSJnMQ")
+YT = "https://www.youtube.com/channel/"
+PL = "https://www.youtube.com/playlist?list="
+# (source key, channel/show name for the credit, listing URL, kind, title pattern a podcast episode must match)
 SOURCES = [
-    ("official", "Oklahoma State Athletics", "https://www.youtube.com/channel/UCiPbE1TBmEfgUWcQJUztxrQ/streams"),
-    ("official", "Oklahoma State Athletics", "https://www.youtube.com/channel/UCiPbE1TBmEfgUWcQJUztxrQ/videos"),
-    ("pistolsfiring", "Pistols Firing", "https://www.youtube.com/channel/UCCuruNGNiEZlivs5e2ptFfw/videos"),
-    ("ocollegian", "The Daily O'Collegian", "https://www.youtube.com/channel/UCoTJcRGMQcnByE7EijpQgvQ/videos"),
+    ("official", "Oklahoma State Athletics", YT + OSU + "/streams", "interview", None),
+    ("official", "Oklahoma State Athletics", YT + OSU + "/videos", "interview", None),
+    ("pistolsfiring", "Pistols Firing", YT + PF + "/videos", "interview", None),
+    ("ocollegian", "The Daily O'Collegian", YT + "UCoTJcRGMQcnByE7EijpQgvQ/videos", "interview", None),
+    ("insideosu", "Inside OSU Athletics", YT + OSU + "/videos", "podcast", r"inside (oklahoma state|osu) athletics"),
+    ("insideosu", "Inside OSU Athletics", PL + "PLRt0iiQWJhs8", "podcast", r"."),
+    ("cowgirlsirl", "Cowgirls IRL", PL + "PLbiZXmECAGBw", "podcast", r"cowgirls? ?irl|cowgirls podcast"),
+    ("lockedon", "Locked On Oklahoma State", YT + LO + "/videos", "podcast", r"."),
+    ("lockedon", "Locked On Oklahoma State", YT + LO + "/streams", "podcast", r"."),
+    ("pfpodcast", "Pistols Firing Podcast", YT + CC + "/videos", "podcast", r"pistols firing"),
+    ("pfpodcast", "Pistols Firing Podcast", YT + CC + "/streams", "podcast", r"pistols firing"),
+    ("thereload", "The Reload (Pistols Firing)", YT + PF + "/videos", "podcast", r"the reload"),
 ]
+OSU_TOPIC = re.compile(r"oklahoma state|\bOSU\b|okstate|cowboys?|cowgirls?|pokes|stillwater|bedlam", re.I)
+INSIDE = re.compile(r"inside (oklahoma state|osu) athletics|the reload", re.I)
 SEEN = Path(__file__).resolve().parent.parent / "state" / "seen.json"
 INTERVIEW = re.compile(r"news conference|press conference|postgame|post game|media availability|availability|"
                        r"interview|media day|presser|one.on.one|talks? with the media", re.I)
@@ -38,7 +58,8 @@ SKIP = re.compile(r"highlights|hype|trailer|recap|hall of honor|cinematic|letter
 COACHES = re.compile(r"head coach|eric morris|steve lutz|jacie hoyt|david taylor|josh holliday|kenny gajewski|"
                      r"coach", re.I)
 MAX_AGE_DAYS = 3
-DAILY_QUEUE = 8
+DAILY_QUEUE = 8          # interviews and press conferences
+PODCAST_QUEUE = 3        # podcast episodes, after interviews
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
 
 
@@ -72,16 +93,26 @@ def person(title):
     return m[2].lower() if m else ""
 
 
+def upload_day(vid):
+    """upload_date for one video (flat listings leave it out); None when YouTube won't say."""
+    r = subprocess.run([sys.executable, "-m", "yt_dlp", "--skip-download", "--print", "%(upload_date)s",
+                        f"https://www.youtube.com/watch?v={vid}"], capture_output=True, text=True)
+    d = r.stdout.strip()[:8]
+    return dt.date(int(d[:4]), int(d[4:6]), int(d[6:])) if d.isdigit() and len(d) == 8 else None
+
+
 def listing():
-    """(source, channel, id, live_status, upload_date, title), newest first within each source."""
+    """(source, channel, kind, pattern, id, live_status, upload_date, duration, title), newest first per source."""
     out = []
-    for src, channel, tab in SOURCES:
-        r = subprocess.run([sys.executable, "-m", "yt_dlp", "--flat-playlist", "--playlist-end", "20",
-                            "--print", "%(id)s\t%(live_status)s\t%(upload_date)s\t%(title)s", tab],
+    for src, channel, tab, kind, pattern in SOURCES:
+        items = ["-I", "-20:"] if "playlist?list=" in tab else ["--playlist-end", "20"]   # playlists list oldest first
+        r = subprocess.run([sys.executable, "-m", "yt_dlp", "--flat-playlist", *items,
+                            "--print", "%(id)s\t%(live_status)s\t%(upload_date)s\t%(duration)s\t%(title)s", tab],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode and not r.stdout:
             print(f"listing failed for {tab}: {r.stderr.strip()[-300:]}", file=sys.stderr)
-        out += [(src, channel, *line.split("\t", 3)) for line in r.stdout.splitlines() if line.count("\t") >= 3]
+        out += [(src, channel, kind, pattern, *line.split("\t", 4)) for line in r.stdout.splitlines()
+                if line.count("\t") >= 4]
     if not any(o[0] == "official" for o in out):
         sys.exit("No videos listed from the official channel: YouTube listing failed.")
     return out
@@ -93,15 +124,43 @@ def main():
     today = dt.datetime.now(CHI).date()
     queued_today = sum(1 for v in seen.values() if v.get("queued") and v.get("queued_on") == today.isoformat())
     official = {(v.get("person"), v.get("day")) for v in seen.values() if v.get("source", "official") == "official"}
-    cands = []
-    for src, channel, vid, status, upload, title in listing():
-        if vid in seen:
+    known_sources = {v.get("source", "official") for v in seen.values()}
+    pod_today = sum(1 for v in seen.values() if v.get("queued") and v.get("queued_on") == today.isoformat()
+                    and v.get("kind") == "podcast")
+    queued_today -= pod_today
+    cands, pods = [], []
+    for src, channel, kind, pattern, vid, status, upload, duration, title in listing():
+        if vid in seen or vid in {c[0] for c in pods}:
+            continue
+        if kind == "podcast":
+            secs = float(duration) if duration.replace(".", "").isdigit() else 0
+            fits = (re.search(pattern, title, re.I) and not (secs and secs < 300)
+                    and OSU_TOPIC.search(title + " " + channel) and not re.search(r"highlights|trailer|#shorts", title, re.I))
+            if not fits:
+                continue                                   # not this show's episode: another source may claim it
+            if src not in known_sources or seed:          # first listing of a show: seed its back catalog
+                seen[vid] = {"title": title, "source": src, "channel": channel, "kind": kind, "queued": False,
+                             "why": "seeded"}
+                continue
+            if status in ("is_upcoming", "is_live", "post_live"):
+                print(f"waiting: {vid} {status} {title}", file=sys.stderr)
+                continue
+            day = title_date(title, upload) or upload_day(vid)
+            entry = {"title": title, "source": src, "channel": channel, "kind": kind,
+                     "day": day.isoformat() if day else None, "queued": False}
+            if not day or (today - day).days > MAX_AGE_DAYS:
+                entry["why"] = "too old"
+                seen[vid] = entry
+            else:
+                pods.append((vid, entry))
+            continue
+        if INSIDE.search(title):                           # Inside OSU / The Reload episodes belong to podcast sources
             continue
         if status in ("is_upcoming", "is_live", "post_live"):   # not downloadable yet: check again next run
             print(f"waiting: {vid} {status} {title}", file=sys.stderr)
             continue
         day = title_date(title, upload)
-        entry = {"title": title, "source": src, "channel": channel, "person": person(title),
+        entry = {"title": title, "source": src, "channel": channel, "person": person(title), "kind": kind,
                  "day": day.isoformat() if day else None, "queued": False}
         is_interview = bool((INTERVIEW.search(title) or (src != "official" and POST_OPP.search(title)))
                             and not SKIP.search(title))
@@ -128,6 +187,14 @@ def main():
         else:
             entry.update(queued=True, queued_on=today.isoformat())
             queued_today += 1
+            new.append(vid)
+        seen[vid] = entry
+    for vid, entry in sorted(pods, key=lambda c: c[1]["day"] or ""):
+        if pod_today >= PODCAST_QUEUE:
+            entry["why"] = f"daily podcast cap {PODCAST_QUEUE}"
+        else:
+            entry.update(queued=True, queued_on=today.isoformat())
+            pod_today += 1
             new.append(vid)
         seen[vid] = entry
     SEEN.parent.mkdir(parents=True, exist_ok=True)
