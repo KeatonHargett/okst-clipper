@@ -42,6 +42,10 @@ POST or SKIP. Ask: would Barstool or a big sports meme page post this today, and
   tailgates, and game day traditions; sideline, bench, and celebration chaos; mic'd up moments; a coach or player soundbite
   that is funny, heated, or quotable; athlete personality and behind the scenes; golf course moments; throwbacks of legends;
   creator edits and reactions with a clear moment. College football gets the benefit of the doubt.
+  Also POST guy culture with a sports or competition angle, the way Barstool does: backyard, bar, and made up games, trick
+  shots, dares and stunts that land, big crowd or party moments, video game sports moments, rec league and weekend warrior
+  chaos. It does not have to be a real game or a famous athlete; it has to be fun to watch and easy to send to a friend.
+  Talking heads and analysis: only a single hot or funny quotable line, never a lecture.
 - SKIP when any is true:
   - anything political, religious, or about a tragedy or a death; real fights or brawls as the subject; a serious injury;
     profanity or nudity on screen; slurs; mocking someone for their looks, race, body, or disability.
