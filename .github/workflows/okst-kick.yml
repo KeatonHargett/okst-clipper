@@ -114,5 +114,9 @@ jobs:
             fi
             if [ "$h" -ge 9 ]; then start_watch; fi
             if [ "$h" -ge 11 ] && [ "$h" -le 19 ]; then start_bar_posts; fi
+            # wormy-promo runs once per Central day (its own guard skips repeats in seconds)
+            if [ "$h" -ge 11 ] && [ "$h" -le 13 ] && [ -n "$BAR_TOK" ]; then
+              curl -s -o /dev/null -X POST -H "Authorization: Bearer $BAR_TOK" -H "Accept: application/vnd.github+json" \n                https://api.github.com/repos/KeatonHargett/bar-meme-cards/actions/workflows/wormy-promo.yml/dispatches \n                -d '{"ref":"main"}' && echo "$(TZ=America/Chicago date +%H:%M) wormy promo started"
+            fi
             if [ "$i" -lt "${{ inputs.loops }}" ]; then sleep 1800; fi
           done
