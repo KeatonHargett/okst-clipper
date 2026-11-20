@@ -1,0 +1,51 @@
+name: okst-weekly
+# Monday report for @okstprobs and @frontporchsports: reach by kind of post and posting time, best posts,
+# next week's moves. Free: the accounts' own tokens (okst/dev) + Claude via the subscription token.
+on:
+  schedule:
+    - cron: "30 15 * * 1"   # Mondays 9:30 AM Central (CST)
+  workflow_dispatch:
+    inputs:
+      issue: { description: "Open the GitHub issue (false = dry run)", default: "true" }
+permissions:
+  contents: write
+  issues: write
+concurrency: { group: okst-weekly, cancel-in-progress: false }
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Doppler CLI
+        run: bash cloud/install_doppler.sh
+      - name: Claude token
+        run: bash cloud/load_claude_token.sh
+      - run: npm install -g -s @anthropic-ai/claude-code
+      - name: Collect the week
+        run: doppler run -p okst -c dev -- python cloud/weekly.py collect
+      - name: Write the words (Claude)
+        run: |
+          claude -p "/okst-weekly" --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" \
+            --model claude-sonnet-5-5 --output-format stream-json --verbose > work/weekly-claude.jsonl 2> work/weekly-claude.err || echo "claude exited $?"
+      - name: Check the words, build the report
+        run: python cloud/weekly.py finish
+      - name: Report issue
+        if: inputs.issue != 'false'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          printf '\n\n[Run log](%s/%s/actions/runs/%s)\n' "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" >> out/report.md
+          gh issue create --title "OKST + FPS weekly report: $(date +%Y-%m-%d)" --body-file out/report.md
+      - name: Save state
+        if: inputs.issue != 'false'
+        run: |
+          git config user.name "okst-bot"; git config user.email "okst-bot@users.noreply.github.com"
+          python3 cloud/save_state.py "weekly: report $(date +%Y-%m-%d)" state/weekly/last.json state/weekly/history.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: okst-weekly-work, path: "work/\nout/", retention-days: 30 }
