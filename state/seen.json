@@ -1127,5 +1127,105 @@
   "day": "2026-11-17",
   "queued": true,
   "queued_on": "2026-11-20"
+ },
+ "YPFV2ZBPkUs": {
+  "title": "Cowboy Football Quarterback Drew Mestemaker - 11/10/26",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "football",
+  "kind": "interview",
+  "day": "2026-11-10",
+  "queued": false
+ },
+ "59ar1ByPyTo": {
+  "title": "Cowboy Foobtall OL Shaun Torgeson - 11/10/26",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "foobtall",
+  "kind": "interview",
+  "day": "2026-11-10",
+  "queued": false
+ },
+ "haVoi2hd0Nk": {
+  "title": "Eric Morris Weekly Press Conference - 11/10/26",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "morris",
+  "kind": "interview",
+  "day": "2026-11-10",
+  "queued": false,
+  "why": "too old"
+ },
+ "Q_wxszPF0xM": {
+  "title": "Oklahoma State vs. Kansas State - Football Recap w/ Marcus Mesis",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "state",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "3-fzsv90u3U": {
+  "title": "Fan Cave Episode 6 Part 2  Spiderman Film Tier List!",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "cave",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "HVMoHMRNE8Q": {
+  "title": "Fan Cave Episode 6 Part 1  Football",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "cave",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "RgXwODFH8YQ": {
+  "title": "Melanie Newman, MLB Play-by-Play Broadcaster | Patti & Ken Moyes Speaker Series",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "newman",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "NydS7rzfpbE": {
+  "title": "How Pokes in Politics prepares for Election Day | 2026 Midterms",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "pokes",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "KTbGUnyHuvI": {
+  "title": "Trying to Vote as an Out-of-state Student | 2026 Midterms",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "dYMlu3y2hlo": {
+  "title": "Oklahoma State at the Cowboy Invitational - Wrestling Recap w/ Austin Lyon",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "state",
+  "kind": "interview",
+  "day": null,
+  "queued": false
+ },
+ "5FGlE0jmaZY": {
+  "title": "Oklahoma State vs. Incarnate Word - Cowboy Basketball Recap w/ Ben Watson",
+  "source": "ocollegian",
+  "channel": "The Daily O'Collegian",
+  "person": "state",
+  "kind": "interview",
+  "day": null,
+  "queued": false
  }
 }
