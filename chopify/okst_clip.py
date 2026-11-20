@@ -83,6 +83,8 @@ CORRECTIONS = {
     "Ethan Weslosski": "Ethan Wesloski",
     "Devon Standard": "Dayvon Standard",
     "White Young": "Wyatt Young",
+    "Morgan McFall": "Morgan McPhaul",   # okstate.com football roster #45
+    "personally wasn't out of game": "personally wasn't at a game",   # Caleb Hawkins 11/17/2026, confirmed with whisper medium
     "most Phillips": "Mose Phillips",
     "Coach Sabota": "Coach Svoboda",
     "Boick": "Bowick",
