@@ -83,8 +83,6 @@ CORRECTIONS = {
     "Ethan Weslosski": "Ethan Wesloski",
     "Devon Standard": "Dayvon Standard",
     "White Young": "Wyatt Young",
-    "Morgan McFall": "Morgan McPhaul",   # okstate.com football roster #45
-    "personally wasn't out of game": "personally wasn't at a game",   # Caleb Hawkins 11/17/2026, confirmed with whisper medium
     "most Phillips": "Mose Phillips",
     "Coach Sabota": "Coach Svoboda",
     "Boick": "Bowick",
@@ -115,6 +113,12 @@ CORRECTIONS = {
     "Carson Cole": "Carson Kolb",
     "Still Water": "Stillwater",
     "Sar is": "Stillwater is",   # scoped: David Taylor, "Stillwater is a pretty small town" (xpIkWdBYqEE 6:44)
+    "Coach Shoboda": "Coach Svoboda",   # Drew Svoboda, okstate.com football staff
+    "Parrot Academy": "Parrott Academy",   # Morgan McPhaul, Arendell-Parrott Academy (okstate.com roster)
+    "an uprainer": "a no brainer",   # scoped: Morgan McPhaul (YcYrjt5nAJE 0:33)
+    "positions to tie them": "positions to tight end",   # scoped: Morgan McPhaul (YcYrjt5nAJE 1:17)
+    "deep tied in room": "deep tight end room",   # scoped: Morgan McPhaul (YcYrjt5nAJE 3:19)
+    "played special games": "played special teams",   # scoped: Morgan McPhaul (YcYrjt5nAJE 1:22, confirmed by whisper medium)
 }
 
 # Everything okst_clip uses from chopify. Checked at startup so a chopify
