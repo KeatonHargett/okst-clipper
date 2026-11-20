@@ -1,0 +1,27 @@
+name: fps-bridge
+# One off timer for fps-scout (7 am to 11 pm Central, every 30 min) while okst-kick's queued runs still use the copy
+# from before fps-scout was added. Once an okst-kick run from commit ef526cb or later is running, it is not needed.
+on:
+  workflow_dispatch:
+    inputs:
+      loops: { description: "Scout starts (30 min apart)", default: "12" }
+permissions:
+  actions: write
+  contents: read
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Start fps-scout every 30 minutes (7 am to 11 pm Central)
+        env: { GH_TOKEN: "${{ github.token }}", GH_REPO: "${{ github.repository }}" }
+        run: |
+          for i in $(seq 1 "${{ inputs.loops }}"); do
+            h=$((10#$(TZ=America/Chicago date +%H)))
+            if [ "$h" -ge 7 ] && [ "$h" -le 23 ]; then
+              gh workflow run fps-scout.yml && echo "$(TZ=America/Chicago date +%H:%M) fps scout started" || echo "::warning::fps scout start failed"
+            else
+              echo "$(TZ=America/Chicago date +%H:%M) quiet hours, skipped"
+            fi
+            if [ "$i" -lt "${{ inputs.loops }}" ]; then sleep 1800; fi
+          done
