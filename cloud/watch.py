@@ -1,6 +1,8 @@
 """Find new Oklahoma State Athletics interviews (any sport) on the channel's Videos and Live tabs (yt-dlp flat listing;
 YouTube's RSS feed returns 404 as of 2026-11-03).
 Prints one URL per line for videos not in state/seen.json and adds them to it.
+Scheduled or still-live streams are left out of seen.json until they have ended, so they're queued on a later run
+(2026-11-20: three pressers were queued while still "This live event will begin in N minutes" and never clipped).
 --seed: mark everything currently in the feed as seen and print nothing."""
 import json
 import re
@@ -21,10 +23,10 @@ def listing():
     out = []
     for tab in TABS:
         r = subprocess.run([sys.executable, "-m", "yt_dlp", "--flat-playlist", "--playlist-end", "15",
-                            "--print", "%(id)s	%(title)s", tab], capture_output=True, text=True)
+                            "--print", "%(id)s	%(live_status)s	%(title)s", tab], capture_output=True, text=True)
         if r.returncode and not r.stdout:
             print(f"listing failed for {tab}: {r.stderr.strip()[-300:]}", file=sys.stderr)
-        out += [tuple(line.split("	", 1)) for line in r.stdout.splitlines() if "	" in line]
+        out += [tuple(line.split("	", 2)) for line in r.stdout.splitlines() if line.count("	") >= 2]
     if not out:
         sys.exit("No videos listed: YouTube listing failed.")
     return out
@@ -33,8 +35,11 @@ def listing():
 def main():
     seen = json.loads(SEEN.read_text()) if SEEN.exists() else {}
     new = []
-    for vid, title in listing():
+    for vid, status, title in listing():
         if vid in seen:
+            continue
+        if status in ("is_upcoming", "is_live", "post_live"):   # not downloadable yet: check again next run
+            print(f"waiting: {vid} {status} {title}", file=sys.stderr)
             continue
         keep = bool(INTERVIEW.search(title)) and not SKIP.search(title)
         seen[vid] = {"title": title, "queued": keep and "--seed" not in sys.argv}

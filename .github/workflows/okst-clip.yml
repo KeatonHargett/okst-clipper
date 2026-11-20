@@ -57,6 +57,7 @@ jobs:
         if: always()
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
+          mkdir -p out
           [ -s out/report.md ] || echo "**No report written.** Check the run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" > out/report.md
           printf '\n\n[Run and clip files](%s/%s/actions/runs/%s)\n' "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" >> out/report.md
           title=$(python -m yt_dlp --skip-download --print title "${{ inputs.url }}" 2>/dev/null || echo "${{ inputs.url }}")
