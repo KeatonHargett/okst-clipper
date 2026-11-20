@@ -8,7 +8,10 @@ disable-model-invocation: true
 # OKST Clip (cloud)
 
 Input: $ARGUMENTS
-First token is the URL. `hold` anywhere after it means: make and stage everything, ship nothing.
+First token is the URL. `hold` anywhere after it means: make and stage everything, ship nothing. `podcast` anywhere after
+it means the video is a podcast episode (PODCASTS rules below); otherwise it is an interview or press conference.
+PRIORITY (Keaton, 2026-11-20): interviews and pre/postgame press conferences go out as fast as possible, then podcasts,
+then everything else. On an interview run, work straight through to SHIP; don't add extra review passes.
 
 You run alone on a GitHub Actions runner. Nobody can answer a question. Wherever the desktop /okst-clip would stop and
 ask, write the question into the report, ship nothing, and finish. Never wait.
@@ -50,7 +53,11 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
         prediction or rumor as news.
       - No highlights split (step 2e) for podcasts. Multi-camera or side-by-side layouts: use the speaker crop (2d).
       - Long episodes (over 60 min): use the transcript to find the 2 best moments; don't watch more frames than needed.
-   b. Daily cap: count POST LOG lines whose "date" is today in America/Chicago. At 6 or more, ship nothing today (hold everything).
+   b. Daily caps, by POST LOG lines whose "date" is today in America/Chicago. Other clip runs post at the same time, so
+      count from the live log: `git -C "$GITHUB_WORKSPACE" fetch -q origin main && git -C "$GITHUB_WORKSPACE" show
+      origin/main:state/posted-log.jsonl` (fall back to the local file if that fails).
+      - Interview runs: lines without "kind" or with "kind": "interview". At 10 or more, hold everything.
+      - Podcast runs: at 2 or more "kind": "podcast" lines, or 10 or more lines of any kind, hold everything.
    c. Duplicate check: `doppler run -p okst -c dev -- python ../cloud/ig_recent.py` prints the latest Instagram captions.
       If a recent caption is clearly from this same press conference (same person, same day, same opponent), Keaton already
       clipped it by hand: stop with "already posted".
@@ -100,13 +107,14 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
    (the version that ships), so the .txt and .cover.jpg names still match.
 7. `python make_review_page.py "<OUT>" --flags "<OUT>/review-flags.json" --no-open`.
 8. SHIP, unless the input said hold, the daily cap is reached, you recommend holding every clip, or a name question is open.
-   For each recommended clip in file name order (case insensitive), stop if the day's total in POST LOG would pass 6:
+   For each recommended clip in file name order (case insensitive), recount the caps in 0b from the live log right before
+   posting it and stop once a cap is reached:
    - Check: a final .txt with the same base name, #OKState first of exactly 5 hashtags, no hyphens or dashes, blank lines
      between the parts (one right before the hashtags). Never ship a .draft.txt.
    - `doppler run -p okst -c dev -- python ig_publish.py --reel "<OUT>/<base>.mp4"` once. If <base>.published.json already
      exists, skip it. If a post fails, stop the batch, never retry, and put the error in REPORT. A "WARNING: Facebook post
      failed" still counts as shipped.
-   - Append to POST LOG: {"date": "<YYYY-MM-DD America/Chicago>", "video": "<URL>", "clip": "<base>.mp4", "instagram": "<permalink>", "facebook": "<link>"}
+   - Append to POST LOG: {"date": "<YYYY-MM-DD America/Chicago>", "video": "<URL>", "kind": "<interview or podcast>", "clip": "<base>.mp4", "instagram": "<permalink>", "facebook": "<link>"}
    - Move the mp4, .txt, .cover.jpg, and .published.json to POSTED.
    Then move everything left (held clips, all .draft.txt, review.html) to HOLD.
 9. REPORT (GitHub flavored markdown, it becomes the issue body): first line `**Shipped N of M clips**` (or why nothing

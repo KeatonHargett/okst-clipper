@@ -1,5 +1,7 @@
 name: okst-watch
-# Every 2 hours, 9 am to midnight Central (14:00 to 06:00 UTC): look for new interviews and queue a clip run for each.
+# Every 2 hours, 9 am to midnight Central (14:00 to 06:00 UTC), plus okst-kick every 30 min: look for new interviews and
+# podcasts and queue a clip run for each (interviews first). While a press conference is streaming live, the run stays up
+# and checks every 2 minutes (up to 50 min), so the clip run starts as soon as the stream ends.
 on:
   schedule:
     - cron: "9 14-23/2,0-6/2 * * *"
@@ -11,20 +13,22 @@ concurrency: { group: okst-watch, cancel-in-progress: false }
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - run: pip install -q -U "yt-dlp[default]"
-      - name: Find new interviews
-        id: find
-        run: |
-          python cloud/watch.py > new.txt
-          cat new.txt
-          echo "count=$(grep -c . new.txt || true)" >> "$GITHUB_OUTPUT"
-      - name: Save seen list
-        run: |
-          python3 cloud/save_state.py "watch: seen list" state/seen.json
-      - name: Queue clip runs
-        if: steps.find.outputs.count != '0'
+      - name: Find new videos and queue clip runs (stays up while a press conference is live)
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: while read -r url; do gh workflow run okst-clip.yml -f url="$url"; done < new.txt
+        run: |
+          start=$(date +%s)
+          while :; do
+            python cloud/watch.py > new.txt
+            cat new.txt
+            python3 cloud/save_state.py "watch: seen list" state/seen.json
+            while IFS=$'\t' read -r url kind; do
+              [ -n "$url" ] && gh workflow run okst-clip.yml -f url="$url" -f kind="${kind:-interview}"
+            done < new.txt
+            [ -s waiting.txt ] || break
+            [ $(( $(date +%s) - start )) -lt 3000 ] || { echo "still live after 50 min, the next watch run picks it up"; break; }
+            echo "live now: $(tr '\n' ' ' < waiting.txt)checking again in 2 min"; sleep 120
+          done

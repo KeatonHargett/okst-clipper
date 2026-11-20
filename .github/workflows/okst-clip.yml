@@ -4,10 +4,13 @@ on:
     inputs:
       url: { description: "YouTube URL", required: true }
       hold: { description: "Make clips but do not post", type: boolean, default: false }
+      kind: { description: "interview (press conference, media session) or podcast", default: "interview" }
+run-name: "okst-clip ${{ inputs.kind }}: ${{ inputs.url }}"
 permissions:
   contents: write
   issues: write
-concurrency: { group: okst-clip, cancel-in-progress: false }
+# One lane per video. A shared group keeps only one pending run, so 5 videos queued at once would cancel the middle 3.
+concurrency: { group: "okst-clip-${{ inputs.url }}", cancel-in-progress: false }
 jobs:
   clip:
     runs-on: ubuntu-latest
@@ -28,7 +31,9 @@ jobs:
           bash cloud/install_media_tools.sh
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
-          pip install -q -U "yt-dlp[default]" faster-whisper opencv-python-headless pillow numpy scenedetect
+          pip install -q -U "yt-dlp[default]" bgutil-ytdlp-pot-provider faster-whisper opencv-python-headless pillow numpy scenedetect
+          # PO token server for YouTube's "Sign in to confirm you're not a bot" check on cloud IPs (yt-dlp plugin above)
+          docker run -d --name bgutil -p 4416:4416 --init brainicism/bgutil-ytdlp-pot-provider >/dev/null || echo "::warning::PO token server did not start"
           npm install -g -s @anthropic-ai/claude-code
       - name: Mask secrets and load the Claude token
         run: bash cloud/load_claude_token.sh
@@ -36,27 +41,36 @@ jobs:
         run: bash cloud/setup_warp.sh
       - name: Download the full video
         run: |
-          id=$(python -m yt_dlp --print id "${{ inputs.url }}")
+          # The id comes from the URL, not from YouTube: asking YouTube for it hit the bot check before any retry ran (2026-11-20).
+          id=$(python3 -c "import re,sys;m=re.search(r'(?:v=|youtu\.be/|shorts/|live/)([\w-]{11})',sys.argv[1]);print(m[1] if m else '')" "${{ inputs.url }}")
+          [ -n "$id" ] || { echo "::error::no YouTube video id in ${{ inputs.url }}"; exit 1; }
           mkdir -p "chopify/work/$id"
-          # YouTube sometimes answers 403 or a bot check on the cloud IP for one client: retry with other clients
-          # (2026-11-20: the 11-17 presser failed with "HTTP Error 403: Forbidden" on the default client).
+          # YouTube answers 403 or a bot check on cloud IPs now and then. Try other player clients, then a fresh WARP exit IP,
+          # then GitHub's own IP. "warp" = re-register WARP first, "direct" = no proxy.
           ok=""
-          for client in "" "tv,web_safari" "mweb" "web_embedded,tv"; do
+          for attempt in "|" "|tv,web_safari" "|mweb" "warp|" "warp|tv,web_safari" "direct|" "direct|tv,web_safari"; do
+            how=${attempt%%|*}; client=${attempt#*|}
             extra=(); [ -n "$client" ] && extra=(--extractor-args "youtube:player_client=$client")
+            [ "$how" = "direct" ] && extra+=(--proxy "")
+            if [ "$how" = "warp" ]; then
+              warp-cli --accept-tos registration delete >/dev/null 2>&1 || true
+              warp-cli --accept-tos registration new >/dev/null 2>&1 || true
+              warp-cli --accept-tos connect >/dev/null 2>&1 || true; sleep 8
+            fi
             if python -m yt_dlp -f "bestvideo*+bestaudio/best" -S "vcodec:h264,res:1080,acodec:m4a" -N 4 \
                  --retries 10 --fragment-retries 10 "${extra[@]}" \
                  --merge-output-format mp4 --no-playlist -o "chopify/work/$id/source.%(ext)s" "${{ inputs.url }}"; then
-              ok=1; break
+              ok=1; echo "downloaded with ${how:-warp} ${client:-default client}"; break
             fi
-            echo "::warning::download failed with player_client='${client:-default}', trying the next one"
-            rm -f "chopify/work/$id"/source.*; sleep 20
+            echo "::warning::download failed (${how:-warp}, player_client=${client:-default}), trying the next way"
+            rm -f "chopify/work/$id"/source.*; sleep 15
           done
           [ -n "$ok" ] || { echo "::error::YouTube refused every download method"; exit 1; }
           ls -la "chopify/work/$id"
       - name: Clip and ship (Claude)
         run: |
           mkdir -p out
-          claude -p "/okst-clip-cloud ${{ inputs.url }}${{ inputs.hold && ' hold' || '' }}" \
+          claude -p "/okst-clip-cloud ${{ inputs.url }}${{ inputs.hold && ' hold' || '' }}${{ inputs.kind == 'podcast' && ' podcast' || '' }}" \
             --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" --model claude-opus-5-5 \
             --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || rc=$?
           echo "claude exited ${rc:-0}"

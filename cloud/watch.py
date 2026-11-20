@@ -58,7 +58,7 @@ SKIP = re.compile(r"highlights|hype|trailer|recap|hall of honor|cinematic|letter
 COACHES = re.compile(r"head coach|eric morris|steve lutz|jacie hoyt|david taylor|josh holliday|kenny gajewski|"
                      r"coach", re.I)
 MAX_AGE_DAYS = 3
-DAILY_QUEUE = 8          # interviews and press conferences
+DAILY_QUEUE = 12         # interviews and press conferences (they always go first)
 PODCAST_QUEUE = 3        # podcast episodes, after interviews
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
 
@@ -129,6 +129,7 @@ def main():
                     and v.get("kind") == "podcast")
     queued_today -= pod_today
     cands, pods = [], []
+    live_wait = []                                         # interviews streaming right now: okst-watch rechecks every 2 min
     for src, channel, kind, pattern, vid, status, upload, duration, title in listing():
         if vid in seen or vid in {c[0] for c in pods}:
             continue
@@ -158,6 +159,8 @@ def main():
             continue
         if status in ("is_upcoming", "is_live", "post_live"):   # not downloadable yet: check again next run
             print(f"waiting: {vid} {status} {title}", file=sys.stderr)
+            if status != "is_upcoming":
+                live_wait.append(vid)
             continue
         day = title_date(title, upload)
         entry = {"title": title, "source": src, "channel": channel, "person": person(title), "kind": kind,
@@ -199,8 +202,9 @@ def main():
         seen[vid] = entry
     SEEN.parent.mkdir(parents=True, exist_ok=True)
     SEEN.write_text(json.dumps(seen, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    for vid in new:
-        print(f"https://www.youtube.com/watch?v={vid}")
+    Path("waiting.txt").write_text("".join(f"{v}\n" for v in dict.fromkeys(live_wait)), encoding="utf-8")
+    for vid in new:                                        # interviews first, then podcasts
+        print(f"https://www.youtube.com/watch?v={vid}\t{seen[vid].get('kind', 'interview')}")
 
 
 if __name__ == "__main__":
