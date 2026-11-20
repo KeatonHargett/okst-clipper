@@ -20,6 +20,7 @@ Rules:
 - At most DAILY_QUEUE clip runs per America/Chicago day (each run is a full Claude session); head coaches go first.
 --seed: mark everything currently listed as seen and print nothing."""
 import datetime as dt
+import os
 import json
 import re
 import subprocess
@@ -105,6 +106,8 @@ def listing():
     """(source, channel, kind, pattern, id, live_status, upload_date, duration, title), newest first per source."""
     out = []
     for src, channel, tab, kind, pattern in SOURCES:
+        if kind == "podcast" and os.environ.get("WATCH_PODCASTS") == "0":   # quick rechecks: interviews only
+            continue
         items = ["-I", "-20:"] if "playlist?list=" in tab else ["--playlist-end", "20"]   # playlists list oldest first
         r = subprocess.run([sys.executable, "-m", "yt_dlp", "--flat-playlist", *items,
                             "--print", "%(id)s\t%(live_status)s\t%(upload_date)s\t%(duration)s\t%(title)s", tab],

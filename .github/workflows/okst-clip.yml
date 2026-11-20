@@ -24,6 +24,11 @@ jobs:
         with: { python-version: "3.12" }
       - uses: denoland/setup-deno@v2
         with: { deno-version: v2.x }
+      - name: WARP package cache
+        uses: actions/cache@v4
+        with: { path: /tmp/warp-debs, key: "warp-debs-v1-${{ runner.os }}" }
+      - name: Start Cloudflare WARP in the background (YouTube blocks cloud IPs)
+        run: nohup bash cloud/setup_warp.sh > /tmp/warp.log 2>&1 &
       - name: Doppler CLI (retries; dopplerhq/cli-action timed out at 30 s)
         run: bash cloud/install_doppler.sh
       - name: Tools
@@ -37,8 +42,11 @@ jobs:
           npm install -g -s @anthropic-ai/claude-code
       - name: Mask secrets and load the Claude token
         run: bash cloud/load_claude_token.sh
-      - name: Cloudflare WARP for YouTube
-        run: bash cloud/setup_warp.sh
+      - name: Wait for WARP
+        run: |
+          for i in $(seq 1 360); do grep -q "WARP exit" /tmp/warp.log && break; sleep 2; done
+          cat /tmp/warp.log
+          grep -q "WARP exit" /tmp/warp.log || echo "::warning::WARP not ready after 12 min; the download falls back to other ways"
       - name: Download the full video
         run: |
           # The id comes from the URL, not from YouTube: asking YouTube for it hit the bot check before any retry ran (2026-11-20).

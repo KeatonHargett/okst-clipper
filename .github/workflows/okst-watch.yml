@@ -1,7 +1,8 @@
 name: okst-watch
 # Every 2 hours, 9 am to midnight Central (14:00 to 06:00 UTC), plus okst-kick every 30 min: look for new interviews and
-# podcasts and queue a clip run for each (interviews first). While a press conference is streaming live, the run stays up
-# and checks every 2 minutes (up to 50 min), so the clip run starts as soon as the stream ends.
+# podcasts and queue a clip run for each (interviews first). Each run keeps checking every 4 minutes for 27 minutes, so
+# with okst-kick starting one every 30 minutes the sources are checked every few minutes all day. While a press conference
+# is streaming live it checks every 2 minutes (up to 55 min), so the clip run starts as soon as the stream ends.
 on:
   schedule:
     - cron: "9 14-23/2,0-6/2 * * *"
@@ -22,13 +23,19 @@ jobs:
         run: |
           start=$(date +%s)
           while :; do
-            python cloud/watch.py > new.txt
+            # podcasts once per run; the 2 and 4 minute rechecks list only the interview sources (fewer YouTube requests)
+            WATCH_PODCASTS=${pods:-1} python cloud/watch.py > new.txt; pods=0
             cat new.txt
             python3 cloud/save_state.py "watch: seen list" state/seen.json
             while IFS=$'\t' read -r url kind; do
               [ -n "$url" ] && gh workflow run okst-clip.yml -f url="$url" -f kind="${kind:-interview}"
             done < new.txt
-            [ -s waiting.txt ] || break
-            [ $(( $(date +%s) - start )) -lt 3000 ] || { echo "still live after 50 min, the next watch run picks it up"; break; }
-            echo "live now: $(tr '\n' ' ' < waiting.txt)checking again in 2 min"; sleep 120
+            age=$(( $(date +%s) - start ))
+            if [ -s waiting.txt ]; then
+              [ "$age" -lt 3300 ] || { echo "still live after 55 min, the next watch run picks it up"; break; }
+              echo "live now: $(tr '\n' ' ' < waiting.txt)checking again in 2 min"; sleep 120
+            else
+              [ "$age" -lt 1620 ] || break
+              sleep 240
+            fi
           done

@@ -5,7 +5,16 @@ set -euo pipefail
 curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
   | sudo tee /etc/apt/sources.list.d/cloudflare-client.list >/dev/null
-bash "$(dirname "$0")/apt_install.sh" cloudflare-warp
+# Ubuntu's mirrors often stall on GitHub runners (2026-11-20: 9 minutes before the download could start), so the
+# workflows cache the .deb files in /tmp/warp-debs (actions/cache) and a cache hit installs them with dpkg in seconds.
+DEBS=/tmp/warp-debs
+if ls "$DEBS"/cloudflare-warp_*.deb >/dev/null 2>&1 && sudo dpkg -i "$DEBS"/*.deb >/dev/null 2>&1; then
+  echo "warp: installed from cached packages"
+else
+  sudo mkdir -p "$DEBS/partial"
+  bash "$(dirname "$0")/apt_install.sh" -o Dir::Cache::archives="$DEBS" cloudflare-warp
+  sudo chmod -R a+rX "$DEBS"; sudo rm -rf "$DEBS/partial" "$DEBS/lock"
+fi
 sleep 3
 warp-cli --accept-tos registration new >/dev/null 2>&1 || true
 warp-cli --accept-tos mode proxy

@@ -11,10 +11,17 @@ Input: $ARGUMENTS
 First token is the URL. `hold` anywhere after it means: make and stage everything, ship nothing. `podcast` anywhere after
 it means the video is a podcast episode (PODCASTS rules below); otherwise it is an interview or press conference.
 PRIORITY (Keaton, 2026-11-20): interviews and pre/postgame press conferences go out as fast as possible, then podcasts,
-then everything else. On an interview run, work straight through to SHIP; don't add extra review passes.
+then everything else. "The main thing is speed. I must get these clips out before others."
 
-You run alone on a GitHub Actions runner. Nobody can answer a question. Wherever the desktop /okst-clip would stop and
-ask, write the question into the report, ship nothing, and finish. Never wait.
+AUTONOMOUS (Keaton, 2026-11-20: "I don't want to have to approve anything... you have my approval"). You run alone on a
+GitHub Actions runner and nobody reviews anything before it posts. Never stop to ask, never leave a decision for a human,
+never ship nothing because of a question. Decide with these rules:
+- A problem with one clip (wrong speaker, short audio, a misspelled name burned in that you can't fix, a fact you can't
+  confirm) drops THAT clip only. Ship every other good clip.
+- A name you cannot confirm from the roster, the title or the description stays out of the caption; the clip still ships.
+- The only reasons to ship nothing: the guards in step 0, `hold` in the input, or no clip worth posting.
+SPEED: on interview runs, post the strongest clip first, the moment it passes its checks (step 2g), then do the rest.
+Don't add review passes beyond the checks written here.
 
 PROJECT: $GITHUB_WORKSPACE/chopify (run every python command from here as `python ...`)
 OUT: $GITHUB_WORKSPACE/out/<slug>/ (the review folder; POSTED = OUT/posted, HOLD = OUT/hold)
@@ -59,8 +66,9 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
       - Interview runs: lines without "kind" or with "kind": "interview". At 10 or more, hold everything.
       - Podcast runs: at 2 or more "kind": "podcast" lines, or 10 or more lines of any kind, hold everything.
    c. Duplicate check: `doppler run -p okst -c dev -- python ../cloud/ig_recent.py` prints the latest Instagram captions.
-      If a recent caption is clearly from this same press conference (same person, same day, same opponent), Keaton already
-      clipped it by hand: stop with "already posted".
+      If a recent caption is from this same session (same person, same day, same opponent), don't repeat it: skip only the
+      answers it already covers (same quote or same topic) and clip the other strong moments. Stop with "already posted"
+      only when every strong moment is already up.
 1. Confirm okst_clip.py, logo.png, fonts/impact.ttf exist.
 2. Pick and render:
    a. `python okst_clip.py "<URL>" --transcript-only`. Read the run folder's words.txt and sentences.txt.
@@ -72,6 +80,8 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
       Prefer clips whose burned in captions contain no misspelled name.
    c. Pick 3 to 6 clips with the same rules as /okst-clip step 2c (15 to 60 s, sentence start, complete thought, no outside
       context needed, strong first 3 seconds; prefer emotion, opinions, player praise, quotable lines; skip reporter questions).
+      Rank them strongest first (the line people will share: news like injury or starter status, a strong opinion,
+      emotion, a quotable line).
    d. Speaker crop (multi person tables). Grab frames from source.mp4 at 3 points
       (`ffmpeg -ss <t> -i work/<id>/source.mp4 -frames:v 1 -vf scale=960:-1 /tmp/src_<t>.jpg`) and look at them.
       If more than one face is at the table, work out each seat's x position as a fraction of the frame width and who speaks in
@@ -86,6 +96,10 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
       don't need it. Before rendering, follow ../docs/edit-hard-rules.md (cut on silence, never inside a word, pad edges).
    f. Render: `python okst_clip.py "<URL>" --color orange --ranges "<m:ss.s-m:ss.s>,..." [--highlights "<url>"] [--speaker-x <f>] --out "$GITHUB_WORKSPACE/out/<slug>"`
       If a requested start equals the previous sentence's last word end, add 0.05 s to the start.
+   g. FIRST CLIP FAST (interview runs): right after 2c and 2d, render only the strongest clip, plain (no --highlights;
+      skip 2e and the opening photo for this one), do its step 3 checks, its step 4 caption and step 4b cover, then SHIP it
+      with the step 8 bullets before you render anything else. Then render the remaining clips (with highlights and the
+      opening photo when they apply) and continue from step 3 for them. Podcast runs skip this and go in order.
 3. Still frame check exactly as /okst-clip step 3, plus: the person in the top half must be the one speaking in that clip.
    Also run `ffprobe -v error -select_streams a:0 -show_entries stream=duration -of csv=p=0 <mp4>` on every clip: audio must
    cover the clip's length. Wrong speaker or short audio = hold that clip.
@@ -106,7 +120,7 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
 6. When <base>.intro.mp4 exists, rename the plain <base>.mp4 to <base>.plain.mp4 and the intro version to <base>.mp4
    (the version that ships), so the .txt and .cover.jpg names still match.
 7. `python make_review_page.py "<OUT>" --flags "<OUT>/review-flags.json" --no-open`.
-8. SHIP, unless the input said hold, the daily cap is reached, you recommend holding every clip, or a name question is open.
+8. SHIP every clip that passed its checks, unless the input said hold or a daily cap is reached.
    For each recommended clip in file name order (case insensitive), recount the caps in 0b from the live log right before
    posting it and stop once a cap is reached:
    - Check: a final .txt with the same base name, #OKState first of exactly 5 hashtags, no hyphens or dashes, blank lines
@@ -121,12 +135,12 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
    shipped), then the video title linked to its URL, the highlights video (or none and why), transcript source, corrections
    added, ambiguous names flagged, speaker crop used, intro photo used or skipped, then the /okst-clip step 8 table (clip
    number, file, range, length, why picked, hook line, hashtags, flags, ship or hold) with each shipped clip's Instagram
-   permalink and Facebook link. End with: "Clip files: see the run's okst-clips artifact." List any held clip a human could
-   still ship.
+   permalink and Facebook link. End with: "Clip files: see the run's okst-clips artifact." For each dropped clip, one line
+   saying why. Never ask Keaton to approve, pick, or rerun anything.
 
 ## Rules
 Never log into Instagram, Meta, X, TikTok, or Repurpose. Nothing posts except through step 8.
-Never invent a fact or a name. If something is missing, hold and say so in REPORT.
+Never invent a fact or a name. If something is missing, leave it out of the caption (or drop that one clip) and say so in REPORT.
 No hyphens or dashes in any caption text.
 Never delete files; move them. Only review.html and review-flags.json may be rewritten.
 Never edit chopify's code except CORRECTIONS in okst_clip.py (step 2b); the workflow commits CORRECTIONS changes back.
