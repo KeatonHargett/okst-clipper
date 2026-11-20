@@ -28,7 +28,7 @@ jobs:
           bash cloud/install_media_tools.sh
           curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i /tmp/cloudflared.deb >/dev/null
-          pip install -q -U "yt-dlp[default]" faster-whisper opencv-python-headless pillow numpy
+          pip install -q -U "yt-dlp[default]" faster-whisper opencv-python-headless pillow numpy scenedetect
           npm install -g -s @anthropic-ai/claude-code
       - name: Mask secrets and load the Claude token
         run: bash cloud/load_claude_token.sh

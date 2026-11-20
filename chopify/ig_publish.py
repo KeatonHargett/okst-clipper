@@ -749,12 +749,18 @@ def cmd_verify(media_id):
 TRIAL_STRATEGIES = ("SS_PERFORMANCE", "MANUAL")
 
 
-def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_rights=False, trial=None):
+def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_rights=False, trial=None, collab=None):
     """Publish one mp4 as a Reel (shared to the feed). Caption is the .txt with the same base name.
 
     trial: "SS_PERFORMANCE" or "MANUAL" makes it a Trial Reel (Instagram shows it to non-followers first; it stays off
     the profile grid and followers' feeds until it graduates; SS_PERFORMANCE graduates on its own when it does well).
-    If Instagram refuses trial_params, the Reel posts normally with a WARNING. Facebook gets it right away either way."""
+    If Instagram refuses trial_params, the Reel posts normally with a WARNING. Facebook gets it right away either way.
+    collab: up to 3 Instagram usernames invited as collaborators (the original creator), so the Reel can also show on
+    their profile once they accept. Not used on Trial Reels. If Instagram refuses the invite, the Reel posts without it."""
+    collab = [c.lstrip("@").strip() for c in (collab or []) if c.strip()][:3]
+    if collab and trial:
+        print(f"NOTE: collaborators are skipped on Trial Reels ({', '.join(collab)} not invited).")
+        collab = []
     mp4 = mp4.resolve()
     done = mp4.with_name(mp4.stem + ".published.json")
     if fb_only:
@@ -772,7 +778,8 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
         print(f"Account: @{me['username']}  Reel: {mp4.name} {info['width']}x{info['height']} "
               f"{info['duration']:.1f}s{'' if info['audio'] else ' (no audio)'}  Caption: {len(caption)} chars  "
               f"Location: {location['name'] if location else 'none'}  Cover: {cover.name if cover else 'none'}"
-              f"{'  TRIAL REEL (' + trial + ')' if trial else ''}")
+              f"{'  TRIAL REEL (' + trial + ')' if trial else ''}"
+              f"{'  COLLAB INVITE: ' + ', '.join('@' + c for c in collab) if collab else ''}")
     if (fb or fb_only) and not stage_only:
         print(f"Facebook Page: {fb_status()}")
     if dry_run:
@@ -797,7 +804,14 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
                     raise
                 print(f"WARNING: Instagram refused the Trial Reel ({e}); posting it as a normal Reel.")
                 trial = None
-        if not trial:
+        if not trial and collab:
+            try:
+                c = create_container(f"{ig}/media", token, location, media_type="REELS", video_url=urls[mp4.name],
+                                     caption=caption, share_to_feed="true", collaborators=json.dumps(collab), **extra)
+            except ApiError as e:
+                print(f"WARNING: Instagram refused the collab invite to {', '.join(collab)} ({e}); posting without it.")
+                collab = []
+        if not trial and not collab:
             c = create_container(f"{ig}/media", token, location, media_type="REELS", video_url=urls[mp4.name],
                                  caption=caption, share_to_feed="true", **extra)
         wait_ready(c, token, "Reel", timeout_s=900)
@@ -810,7 +824,7 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
             "media_id": media_id, "permalink": permalink, "account": me["username"],
             "published_at": dt.datetime.now(dt.timezone.utc).isoformat(), "file": mp4.name,
             "cover": cover.name if cover else None,
-            "location": location.get("name") if location else None, "trial": trial}, indent=2),
+            "location": location.get("name") if location else None, "trial": trial, "collab": collab or None}, indent=2),
             encoding="utf-8")
         print(f"PUBLISHED {permalink}" + (f" as a TRIAL REEL ({trial}): non-followers first, off the grid until it "
                                          "graduates" if trial else ""))
@@ -867,8 +881,13 @@ def main():
     ap.add_argument("--trial", nargs="?", const="SS_PERFORMANCE", choices=TRIAL_STRATEGIES,
                     help="With --reel: post as a Trial Reel (non-followers first). Default graduation SS_PERFORMANCE "
                          "(Instagram shares it to followers when it performs well); MANUAL never graduates on its own")
+    ap.add_argument("--collab", action="append", metavar="USERNAME",
+                    help="With --reel: invite this Instagram account as a collaborator (repeat for up to 3). "
+                         "Skipped on Trial Reels; dropped with a WARNING if Instagram refuses it")
     args = ap.parse_args()
     use_account(args.account)
+    if args.collab and not args.reel:
+        ap.error("--collab works only with --reel")
     if args.trial and not args.reel:
         ap.error("--trial works only with --reel (Instagram has Trial Reels, not trial photos or carousels)")
     if args.fb_only and (args.no_fb or args.stage_only):
@@ -882,7 +901,7 @@ def main():
             cmd_check(args.refresh)
         elif args.reel:
             cmd_reel(Path(args.reel), args.dry_run, args.stage_only, not args.no_fb, args.fb_only,
-                     args.strict_rights, args.trial)
+                     args.strict_rights, args.trial, args.collab)
         elif args.folder:
             cmd_publish(Path(args.folder), args.dry_run, not args.no_fb, args.fb_only)
         else:

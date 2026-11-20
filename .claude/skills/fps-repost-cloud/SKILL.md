@@ -120,6 +120,12 @@ trial a carousel or photo or a link Keaton sent himself. Say "Trial Reel" in REP
 9. SHIP (unless hold or an open question): once,
    `doppler run -p okst -c dev -- python ig_publish.py --account fps --reel "<STAGE>/<mp4>" --strict-rights` (plus `--trial`
    for an evergreen AUTO Reel). A `--dry-run` first is fine; the caption check is in it.
+   COLLAB: on every Reel that is NOT a Trial Reel, add `--collab <instagram username>` for the original creator, but only when
+   you have confirmed that Instagram account belongs to the same creator: the link is an Instagram post, or Business Discovery
+   (`IG_ACCOUNT=fps doppler run -p okst -c dev -- python ../cloud/ig_lookup.py <username>`) shows that username with the same
+   name and the same videos. A TikTok handle alone is not
+   enough; a stranger with the same username would get the invite. No confirmed account: no --collab. The creator gets an
+   invite; if they accept, the Reel also shows on their profile. Add "collab": "@<username>" to the LOG line.
    - Exit code 3 or COPYRIGHT_BLOCK in the output: write the whole output to $GITHUB_WORKSPACE/out/copyright_stop, ship nothing
      more, never retry. The workflow switches FPS auto posting off and opens an issue.
    - DAILY LIMIT ("maximum number of posts", code 9 or 2207042): nothing went out. Append {"url": "<URL>", "auto": <true|false>,
@@ -127,7 +133,7 @@ trial a carousel or photo or a link Keaton sent himself. Say "Trial Reel" in REP
    - If <base>.published.json already exists, it went out: never run it again. A failed publish: never retry; put the error in
      REPORT. "WARNING: Facebook post failed" still counts as shipped: give the `--fb-only` retry command in REPORT.
    Append to LOG: {"date": "<YYYY-MM-DD America/Chicago>", "url": "<URL>", "slug": "<slug>", "creator": "@<handle>",
-   "instagram": "<permalink>", "facebook": "<link or FAILED>"} (plus "auto" and "trial" when they apply).
+   "instagram": "<permalink>", "facebook": "<link or FAILED>"} (plus "auto", "trial" and "collab" when they apply).
 
 ## CAROUSEL
 C2. Handle: the post owner from the fetch output or the given @handle. HANDLE_CONFLICT: hold (SKIP when auto).

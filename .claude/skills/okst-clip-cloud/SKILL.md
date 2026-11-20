@@ -53,6 +53,10 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
    e. Highlights video: same rules and search as /okst-clip step 2d
       (`python -m yt_dlp --flat-playlist --print "%(id)s | %(channel)s | %(duration)s | %(title)s" "ytsearch12:Oklahoma State vs <opponent> <sport> highlights <year>"`).
       Oklahoma State Athletics channel first, then the Big 12 Conference, then a network. Never a reupload channel. At least 30 s.
+   e2. Shot cuts: when a range comes from an edited source (a highlights package or a broadcast with replays), list the shot
+      boundaries with `scenedetect -i work/<id>/source.mp4 detect-content list-scenes -n` and move each range edge to the
+      nearest cut within 1 s, so a clip never opens or ends on a half second of the previous shot. Talking-head pressers
+      don't need it. Before rendering, follow ../docs/edit-hard-rules.md (cut on silence, never inside a word, pad edges).
    f. Render: `python okst_clip.py "<URL>" --color orange --ranges "<m:ss.s-m:ss.s>,..." [--highlights "<url>"] [--speaker-x <f>] --out "$GITHUB_WORKSPACE/out/<slug>"`
       If a requested start equals the previous sentence's last word end, add 0.05 s to the start.
 3. Still frame check exactly as /okst-clip step 3, plus: the person in the top half must be the one speaking in that clip.
