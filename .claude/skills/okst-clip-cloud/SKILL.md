@@ -129,6 +129,10 @@ is logged in (DOPPLER_TOKEN). Never print a secret, never run `doppler secrets g
      exists, skip it. If a post fails, stop the batch, never retry, and put the error in REPORT. A "WARNING: Facebook post
      failed" still counts as shipped.
    - Append to POST LOG: {"date": "<YYYY-MM-DD America/Chicago>", "video": "<URL>", "kind": "<interview or podcast>", "clip": "<base>.mp4", "instagram": "<permalink>", "facebook": "<link>"}
+   - Publish that log line right away so other clip runs count it (they post at the same time; 2026-11-20 six parallel
+     runs each saw room under the cap and 13 went up instead of 10): from $GITHUB_WORKSPACE run
+     `python3 cloud/save_state.py "clip: posted <base>" state/posted-log.jsonl chopify/okst_clip.py` (always pass both files:
+     it resets the checkout to main and replays only the files you list, so CORRECTIONS edits survive).
    - Move the mp4, .txt, .cover.jpg, and .published.json to POSTED.
    Then move everything left (held clips, all .draft.txt, review.html) to HOLD.
 9. REPORT (GitHub flavored markdown, it becomes the issue body): first line `**Shipped N of M clips**` (or why nothing
