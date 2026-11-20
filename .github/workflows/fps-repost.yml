@@ -38,7 +38,8 @@ jobs:
                       "tiktok" if "tiktok" in host else "youtube" if "youtu" in host else "other")
           log = pathlib.Path("state/fps/reposted.jsonl")
           seen = log.exists() and any(json.loads(l).get("url") == url for l in log.read_text().splitlines() if l.strip())
-          off = os.environ.get("AUTO") == "true" and pathlib.Path("state/fps/off").exists()
+          # the kill switch stops auto posts; hold runs never post, so they still run (used for tests)
+          off = os.environ.get("AUTO") == "true" and os.environ.get("HOLD") != "true" and pathlib.Path("state/fps/off").exists()
           with open(os.environ["GITHUB_ENV"], "a") as f:
               f.write(f"CLEAN_URL={url}\n")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -46,7 +47,7 @@ jobs:
                       f"off={'true' if off else 'false'}\n")
           print(url, platform, "REPEAT" if seen else "OFF" if off else "new")
           PY
-        env: { AUTO: "${{ inputs.auto }}" }
+        env: { AUTO: "${{ inputs.auto }}", HOLD: "${{ inputs.hold }}" }
       - name: Already posted, switched off, or not a social link
         if: steps.link.outputs.repeat == 'true'
         run: |
