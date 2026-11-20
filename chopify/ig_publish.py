@@ -49,6 +49,14 @@ STATE = Path.home() / ".okst" / "ig_token_state.json"
 LOCK = Path.home() / ".okst" / "ig_publish.lock"
 REFRESH_EVERY = dt.timedelta(days=7)
 MAX_SLIDES = 10
+# Other brands post through their Facebook Page token instead: the same Instagram content API on graph.facebook.com,
+# so no Instagram login token and nothing to refresh (a Page token from a long lived user token never expires).
+# Pick one with --account <name> (or IG_ACCOUNT=<name>). No account = OKST, exactly as before.
+ACCOUNTS = {
+    "fps": {"name": "Front Porch Sports", "ig_id": "17841473798615133", "fb_page": "668687539655602",
+            "token_env": "FPS_PAGE_TOKEN"},   # @frontporchsports; token minted 2026-11-20 from Keaton Social Assistant
+}
+ACCOUNT = None
 DASHES = ("-", "‐", "‑", "‒", "–", "—", "―", "−")
 
 
@@ -61,6 +69,36 @@ RIGHTS_EXIT = 3
 
 class ApiError(RuntimeError):
     pass
+
+
+def use_account(name):
+    """Switch every Instagram and Facebook call to another brand's Page (see ACCOUNTS)."""
+    global ACCOUNT, GRAPH, FB_PAGE_ID, LOCK
+    name = (name or "").strip().lower()
+    if name in ("", "okst"):
+        return
+    if name not in ACCOUNTS:
+        sys.exit(f"Unknown account {name!r}. Known: okst, {', '.join(ACCOUNTS)}")
+    ACCOUNT = ACCOUNTS[name]
+    GRAPH = FB_GRAPH
+    FB_PAGE_ID = ACCOUNT["fb_page"]
+    LOCK = Path.home() / ".okst" / f"ig_publish.{name}.lock"
+
+
+def whoami(token):
+    """{"user_id", "username", "account_type"} of the Instagram account being posted to."""
+    if ACCOUNT:
+        d = get(ACCOUNT["ig_id"], token, fields="id,username")
+        return {"user_id": d["id"], "username": d["username"], "account_type": "BUSINESS (Page token)"}
+    return get("me", token, fields="user_id,username,account_type")
+
+
+def media_path():
+    return f"{ACCOUNT['ig_id']}/media" if ACCOUNT else "me/media"
+
+
+def fb_token():
+    return os.environ.get(ACCOUNT["token_env"] if ACCOUNT else "FB_PAGE_TOKEN")
 
 
 # ---------- Instagram API ----------
@@ -130,9 +168,9 @@ def fb_post(path, token, **params):
 
 
 def fb_status():
-    token = os.environ.get("FB_PAGE_TOKEN")
+    token = fb_token()
     if not token:
-        return "off (FB_PAGE_TOKEN not set)"
+        return f"off ({ACCOUNT['token_env'] if ACCOUNT else 'FB_PAGE_TOKEN'} not set)"
     try:
         return fb_get(FB_PAGE_ID, token, fields="name").get("name")
     except ApiError as e:
@@ -259,7 +297,7 @@ def fb_photos(paths, caption, token):
 def fb_share(done, post_fn):
     """Run post_fn(token) -> (id, kind) and record the outcome in published.json. Never raises."""
     rec = json.loads(done.read_text(encoding="utf-8"))
-    token = os.environ.get("FB_PAGE_TOKEN")
+    token = fb_token()
     if not token:
         rec["facebook_error"] = "FB_PAGE_TOKEN not set"
         print("WARNING: FB_PAGE_TOKEN is not set; skipped Facebook.")
@@ -294,6 +332,11 @@ def fb_only_guard(done):
 # ---------- token ----------
 
 def load_token():
+    if ACCOUNT:
+        tok = os.environ.get(ACCOUNT["token_env"])
+        if not tok:
+            sys.exit(f"{ACCOUNT['token_env']} is not set. Run through: doppler run -p okst -c dev -- ...")
+        return tok
     tok = os.environ.get("IG_ACCESS_TOKEN")
     if not tok:
         sys.exit("IG_ACCESS_TOKEN is not set. Run through: doppler run -p okst -c dev -- ...")
@@ -302,6 +345,8 @@ def load_token():
 
 def maybe_refresh(token, force=False):
     """Refresh the long lived token weekly so it never hits its 60 day expiry. Value goes to Doppler via stdin."""
+    if ACCOUNT:
+        return token   # Page tokens do not expire
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     last = dt.datetime.fromisoformat(state["refreshed_at"]) if state.get("refreshed_at") else None
     now = dt.datetime.now(dt.timezone.utc)
@@ -462,6 +507,17 @@ def unhost():
 def caption_problems(caption):
     tags = re.findall(r"#\w+", caption)
     out = []
+    if ACCOUNT:
+        # Brand pages (Barstool style): a short line, the creator credit, at most 3 hashtags, no dashes.
+        if len(tags) > ACCOUNT.get("max_tags", 3):
+            out.append(f"has {len(tags)} hashtags, at most {ACCOUNT.get('max_tags', 3)}")
+        if not re.search(r"^(🎥|📸) @[\w.]+", caption, re.M):
+            out.append("has no credit line (🎥 @handle or 📸 @handle on its own line)")
+        if any(d in caption for d in DASHES):
+            out.append("contains a hyphen or dash")
+        if len(caption) > 2200:
+            out.append(f"is {len(caption)} characters, over 2,200")
+        return out
     if len(tags) != 5:
         out.append(f"has {len(tags)} hashtags, needs exactly 5")
     if tags and tags[0].lower() != "#okstate":
@@ -578,7 +634,7 @@ def load_job(folder):
 
 def cmd_check(force_refresh=False):
     token = maybe_refresh(load_token(), force=force_refresh)
-    me = get("me", token, fields="user_id,username,account_type")
+    me = whoami(token)
     print(f"Connected: @{me.get('username')} ({me.get('account_type')}) id {me.get('user_id')}")
     try:
         lim = get(f"{me['user_id']}/content_publishing_limit", token, fields="quota_usage,config")
@@ -602,7 +658,7 @@ def cmd_publish(folder, dry_run, fb=True, fb_only=False):
     if not fb_only:
         location = load_location(folder / f"{man['slug']}.location.json")
         token = maybe_refresh(load_token())
-        me = get("me", token, fields="user_id,username")
+        me = whoami(token)
         ig = me["user_id"]
         print(f"Account: @{me['username']}  Slides: {len(slides)}  Caption: {len(caption)} chars  "
               f"Location: {location['name'] if location else 'none'}")
@@ -711,7 +767,7 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
     if not fb_only:
         location = load_location(mp4.with_name(mp4.stem + ".location.json"))
         token = maybe_refresh(load_token())
-        me = get("me", token, fields="user_id,username")
+        me = whoami(token)
         ig = me["user_id"]
         print(f"Account: @{me['username']}  Reel: {mp4.name} {info['width']}x{info['height']} "
               f"{info['duration']:.1f}s{'' if info['audio'] else ' (no audio)'}  Caption: {len(caption)} chars  "
@@ -771,7 +827,7 @@ def cmd_reel(mp4, dry_run, stage_only=False, fb=True, fb_only=False, strict_righ
 def cmd_check_location(ids):
     """Check Facebook Page IDs as location_id: one unpublished image container each (they expire on their own)."""
     token = maybe_refresh(load_token())
-    ig = get("me", token, fields="user_id")["user_id"]
+    ig = whoami(token)["user_id"]
     tmp = Path(tempfile.mkdtemp(prefix="okst_loc_"))
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=gray:s=1080x1350",
                     "-frames:v", "1", str(tmp / "check.jpg")], check=True)
@@ -792,6 +848,8 @@ def cmd_check_location(ids):
 def main():
     ap = argparse.ArgumentParser(description="Publish OKST posts to Instagram: a carousel review folder or one Reel.")
     ap.add_argument("folder", nargs="?", help="Review folder with carousel.json")
+    ap.add_argument("--account", default=os.environ.get("IG_ACCOUNT", ""),
+                    help=f"Post as another brand: {', '.join(ACCOUNTS)} (default OKST)")
     ap.add_argument("--reel", help="Path to one mp4 to publish as a Reel (caption: same name .txt)")
     ap.add_argument("--stage-only", action="store_true",
                     help="With --reel: upload and let Instagram process it, but never publish (a live test)")
@@ -810,6 +868,7 @@ def main():
                     help="With --reel: post as a Trial Reel (non-followers first). Default graduation SS_PERFORMANCE "
                          "(Instagram shares it to followers when it performs well); MANUAL never graduates on its own")
     args = ap.parse_args()
+    use_account(args.account)
     if args.trial and not args.reel:
         ap.error("--trial works only with --reel (Instagram has Trial Reels, not trial photos or carousels)")
     if args.fb_only and (args.no_fb or args.stage_only):

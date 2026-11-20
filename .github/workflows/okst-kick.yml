@@ -1,6 +1,7 @@
 name: okst-kick
 # Free timer for okst-scout (GitHub's own cron has not been firing on this repo).
-# Each run queues the next kick run first, then starts okst-scout every 30 min from 7 am to 11 pm Central.
+# Each run queues the next kick run first, then starts okst-scout and fps-scout (Front Porch Sports) every 30 min from
+# 7 am to 11 pm Central.
 # The same loop also starts okst-watch from 9 am to midnight Central, at most once per 30 min
 # (okst-watch's own cron stays as a backup and counts toward that limit).
 # Every loop, any hour, it also starts okst-highlights for an Oklahoma State game that is about to start, live, or just
@@ -107,6 +108,7 @@ jobs:
             h=$((10#$(TZ=America/Chicago date +%H)))
             if [ "$h" -ge 7 ] && [ "$h" -le 23 ]; then
               if gh workflow run okst-scout.yml; then echo "$(TZ=America/Chicago date +%H:%M) scout started"; else echo "::warning::scout start failed"; fi
+              if gh workflow run fps-scout.yml; then echo "$(TZ=America/Chicago date +%H:%M) fps scout started"; else echo "::warning::fps scout start failed"; fi
             else
               echo "$(TZ=America/Chicago date +%H:%M) quiet hours, skipped"
             fi

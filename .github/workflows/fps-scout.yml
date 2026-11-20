@@ -1,0 +1,45 @@
+name: fps-scout
+# Front Porch Sports: every 30 minutes, 7 am to 11 pm Central (started by okst-kick), find viral sports posts on TikTok,
+# YouTube Shorts, and Instagram posts tagging @frontporchsports (cloud/fps-scout.json lists the sources and limits) and queue
+# an fps-repost auto run for each. Caps: daily_cap shipped posts per Central day, per_run links per run.
+# Kill switch: state/fps/off on main (written automatically after a copyright error) stops all queuing.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency: { group: fps-scout, cancel-in-progress: false }
+jobs:
+  scout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      SCOUT_CFG: cloud/fps-scout.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Doppler CLI (retries; dopplerhq/cli-action timed out at 30 s)
+        run: bash cloud/install_doppler.sh
+      - run: pip install -q -U "yt-dlp[default,curl-cffi]"
+      - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
+        run: bash cloud/setup_warp.sh
+      - name: Find new posts
+        id: find
+        run: |
+          mkdir -p state/fps
+          doppler run -p okst -c dev --only-secrets FPS_PAGE_TOKEN -- python cloud/scout.py > queue.txt
+          echo "Queued:"; cat queue.txt
+          echo "count=$(grep -c . queue.txt || true)" >> "$GITHUB_OUTPUT"
+      - name: Save seen list
+        run: |
+          python3 cloud/save_state.py "fps scout: seen list" state/fps/scout-seen.json state/fps/pending.jsonl
+      - name: Queue repost runs
+        if: steps.find.outputs.count != '0'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          while IFS=$'\t' read -r url mode; do
+            if [ "$mode" = manual ]; then gh workflow run fps-repost.yml -f url="$url"; else gh workflow run fps-repost.yml -f url="$url" -f auto=true; fi
+            sleep 2
+          done < queue.txt

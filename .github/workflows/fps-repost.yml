@@ -1,0 +1,128 @@
+name: fps-repost
+# Front Porch Sports: started by fps-scout (auto=true) or Actions > fps-repost > Run workflow with a link.
+# Reposts Barstool style to Instagram @frontporchsports and the Front Porch Sports Facebook Page
+# (.claude/skills/fps-repost-cloud). A copyright or rights error writes state/fps/off, which stops fps-scout.
+on:
+  workflow_dispatch:
+    inputs:
+      url: { description: "TikTok, Instagram, X, or YouTube link", required: true }
+      handle: { description: "Creator @handle (optional)", required: false, default: "" }
+      hold: { description: "Make it but do not post", type: boolean, default: false }
+      auto: { description: "Found by fps-scout: post only if it fits the brand, skip quietly otherwise", type: boolean, default: false }
+permissions:
+  contents: write
+  issues: write
+concurrency: { group: "fps-repost-${{ inputs.url }}", cancel-in-progress: false }
+jobs:
+  repost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      RAW_URL: ${{ inputs.url }}
+      HANDLE: ${{ inputs.handle }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean the link and check for a repeat
+        id: link
+        run: |
+          python3 - <<'PY'
+          import os, re, json, pathlib
+          raw = os.environ["RAW_URL"].strip()
+          m = re.search(r"https?://\S+", raw)
+          url = m.group(0) if m else raw
+          host = re.sub(r"^https?://(www\.|m\.|vm\.|mobile\.)?", "", url).split("/")[0].lower()
+          if any(h in host for h in ("instagram.com", "x.com", "twitter.com", "tiktok.com")):
+              url = url.split("?")[0].split("#")[0]
+          platform = ("instagram" if "instagram" in host else "x" if host in ("x.com", "twitter.com") else
+                      "tiktok" if "tiktok" in host else "youtube" if "youtu" in host else "other")
+          log = pathlib.Path("state/fps/reposted.jsonl")
+          seen = log.exists() and any(json.loads(l).get("url") == url for l in log.read_text().splitlines() if l.strip())
+          off = os.environ.get("AUTO") == "true" and pathlib.Path("state/fps/off").exists()
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"CLEAN_URL={url}\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"url={url}\nplatform={platform}\nrepeat={'true' if (seen or off or platform == 'other') else 'false'}\n"
+                      f"off={'true' if off else 'false'}\n")
+          print(url, platform, "REPEAT" if seen else "OFF" if off else "new")
+          PY
+        env: { AUTO: "${{ inputs.auto }}" }
+      - name: Already posted, switched off, or not a social link
+        if: steps.link.outputs.repeat == 'true'
+        run: |
+          mkdir -p out
+          if [ "${{ steps.link.outputs.off }}" = "true" ]; then msg="FPS auto posting is switched off (state/fps/off)"
+          elif [ "${{ steps.link.outputs.platform }}" = "other" ]; then msg="not a TikTok, Instagram, X, or YouTube link, so nothing ran"; else msg="this link is already in state/fps/reposted.jsonl"; fi
+          echo "Skipped: $CLEAN_URL" > out/title.txt
+          printf '**Held:** %s.\n\n%s\n' "$msg" "$CLEAN_URL" > out/report.md
+      - uses: actions/setup-python@v5
+        if: steps.link.outputs.repeat != 'true'
+        with: { python-version: "3.12" }
+      - name: Doppler CLI (retries; dopplerhq/cli-action timed out at 30 s)
+        if: steps.link.outputs.repeat != 'true'
+        run: bash cloud/install_doppler.sh
+      - name: Whisper model cache
+        if: steps.link.outputs.repeat != 'true'
+        uses: actions/cache@v4
+        with: { path: ~/.cache/huggingface, key: whisper-small-v1 }
+      - name: Tools
+        if: steps.link.outputs.repeat != 'true'
+        run: |
+          WANT_EMOJI=1 bash cloud/install_media_tools.sh
+          curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i /tmp/cloudflared.deb >/dev/null
+          pip install -q -U "yt-dlp[default,curl-cffi]" faster-whisper pillow pillow-heif numpy
+          npm install -g -s @anthropic-ai/claude-code
+          which google-chrome
+      - name: Mask secrets and load the Claude token
+        if: steps.link.outputs.repeat != 'true'
+        run: bash cloud/load_claude_token.sh
+      - name: Cloudflare WARP (TikTok and YouTube block cloud IPs)
+        if: steps.link.outputs.repeat != 'true' && (steps.link.outputs.platform == 'tiktok' || steps.link.outputs.platform == 'youtube')
+        run: bash cloud/setup_warp.sh
+      - name: Repost (Claude)
+        if: steps.link.outputs.repeat != 'true'
+        run: |
+          mkdir -p out state/fps
+          args="$CLEAN_URL"
+          [ -n "$HANDLE" ] && args="$args @${HANDLE#@}"
+          [ "${{ inputs.hold }}" = "true" ] && args="$args hold"
+          [ "${{ inputs.auto }}" = "true" ] && args="$args auto"
+          claude -p "/fps-repost-cloud $args" \
+            --permission-mode bypassPermissions --disallowedTools "mcp__claude_ai_AApify" --model claude-opus-5-5 \
+            --output-format stream-json --verbose > "$RUNNER_TEMP/claude.jsonl" 2> "$RUNNER_TEMP/claude.err" || rc=$?
+          echo "claude exited ${rc:-0}"
+          python3 cloud/claude_result.py "$RUNNER_TEMP/claude.jsonl" "$RUNNER_TEMP/claude.err" "${rc:-0}"
+      - name: Copyright stop
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if [ -f out/copyright_stop ]; then
+            mkdir -p state/fps
+            echo "$(date -u +%FT%TZ) copyright or rights error on $CLEAN_URL: $(head -c 400 out/copyright_stop)" > state/fps/off
+            printf '**FPS auto posting switched itself OFF** after a copyright or rights error on %s. fps-scout queues nothing until state/fps/off is deleted from main.\n\n```\n%s\n```\n' "$CLEAN_URL" "$(cat out/copyright_stop)" > out/copyright.md
+            gh issue create --title "FPS OFF: copyright or rights error" --body-file out/copyright.md
+          fi
+      - name: Upload files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: fps-repost, path: out/, retention-days: 30 }
+      - name: Report issue
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          mkdir -p out state/fps
+          [ -s out/report.md ] || echo "**No report written.** Check the run log." > out/report.md
+          printf '\n\n[Run and files](%s/%s/actions/runs/%s)\n' "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}" >> out/report.md
+          title=$(head -n1 out/title.txt 2>/dev/null || true)
+          if [ "${{ inputs.auto }}" = "true" ] && { [ "${title#Skipped}" != "$title" ] || [ "${title#Waiting}" != "$title" ]; }; then
+            python3 -c "import json,sys,datetime;print(json.dumps({'date':datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M'),'url':sys.argv[1],'why':sys.argv[2]}))" "$CLEAN_URL" "$title" >> state/fps/scout-skips.jsonl
+            echo "auto skip logged: $title"
+          else
+            gh issue create --title "FPS: ${title:-$CLEAN_URL}" --body-file out/report.md
+          fi
+      - name: Save the repost log
+        if: always()
+        run: |
+          python3 cloud/save_state.py "fps repost: $CLEAN_URL" state/fps/reposted.jsonl state/fps/scout-skips.jsonl \
+            state/fps/pending.jsonl state/fps/off

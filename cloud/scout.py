@@ -10,7 +10,11 @@ Sources (all free, no logins, no cookies):
   YouTube Shorts                        yt-dlp search sorted by upload date
 
 Run from the repo root: doppler run -p okst -c dev -- python cloud/scout.py
-State: state/scout-seen.json (every post id this has looked at; pruned after 21 days)."""
+State: state/scout-seen.json (every post id this has looked at; pruned after 21 days).
+
+Another brand: SCOUT_CFG=cloud/fps-scout.json runs the same sources from that file, with its own ig_id, token_env,
+state files ("state"), "topic_filter": false (every post passes; Claude judges taste), "daily_cap" (shipped posts per
+Central day, from the reposted log), "per_run" (links queued per run) and "off_file" (kill switch: nothing queues)."""
 import calendar
 import json
 import os
@@ -24,11 +28,13 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CFG = json.loads((ROOT / "cloud" / "scout.json").read_text(encoding="utf-8"))
-SEEN_F = ROOT / "state" / "scout-seen.json"
-REPOSTED_F = ROOT / "state" / "reposted.jsonl"
-PENDING_F = ROOT / "state" / "pending.jsonl"   # links that hit Instagram's daily limit, shipped when room frees up
-IG_ID = "17841434949988123"   # @okstprobs
+CFG = json.loads((ROOT / os.environ.get("SCOUT_CFG", "cloud/scout.json")).read_text(encoding="utf-8"))
+_ST = CFG.get("state", {})
+SEEN_F = ROOT / _ST.get("seen", "state/scout-seen.json")
+REPOSTED_F = ROOT / _ST.get("reposted", "state/reposted.jsonl")
+PENDING_F = ROOT / _ST.get("pending", "state/pending.jsonl")   # links that hit Instagram's daily limit, shipped when room frees up
+IG_ID = CFG.get("ig_id", "17841434949988123")   # default @okstprobs
+TOKEN_ENV = CFG.get("token_env", "FB_PAGE_TOKEN")
 NOW = time.time()
 MAX_AGE = CFG.get("max_age_hours", 48) * 3600
 
@@ -38,9 +44,9 @@ def log(*a):
 
 
 def keywords():
-    words = [w.lower() for w in CFG["keywords"]]
+    words = [w.lower() for w in CFG.get("keywords", [])]
     roster = ROOT / "chopify" / "OSU_ROSTER.txt"
-    if roster.exists():
+    if CFG.get("roster", True) and roster.exists():
         for line in roster.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and len(line.split()) >= 2:
@@ -53,6 +59,8 @@ BLOCK = {b.lower().lstrip("@") for b in CFG.get("block", [])}
 
 
 def is_osu(text):
+    if CFG.get("topic_filter", True) is False:
+        return True
     t = (text or "").lower()
     return any(re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", t) for w in KW)
 
@@ -102,9 +110,9 @@ def tikwm(path, **params):
 
 
 def graph(path, **params):
-    tok = os.environ.get("FB_PAGE_TOKEN")
+    tok = os.environ.get(TOKEN_ENV)
     if not tok:
-        log("  FB_PAGE_TOKEN missing: Instagram sources skipped")
+        log(f"  {TOKEN_ENV} missing: Instagram sources skipped")
         return {}
     params["access_token"] = tok
     url = f"https://graph.facebook.com/v23.0/{path}?" + urllib.parse.urlencode(params)
@@ -194,11 +202,31 @@ def collect():
                 continue
             cands.append({"key": f"yt:{v['id']}", "url": f"https://www.youtube.com/shorts/{v['id']}",
                           "who": v.get("channel") or "", "when": None, "text": v.get("title") or "",
-                          "score": v.get("view_count") or 0, "osu_only": False, "src": f"yt:{q}"})
+                          "score": v.get("view_count") or 0, "osu_only": False, "src": f"yt:{q}",
+                          "min_views": CFG.get("youtube_min_views", 0)})
     return cands
 
 
+def shipped_today():
+    """Posts shipped since midnight Central, from the reposted log (its dates are America/Chicago)."""
+    import datetime
+    from zoneinfo import ZoneInfo
+    today = datetime.datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
+    n = 0
+    if REPOSTED_F.exists():
+        for line in REPOSTED_F.read_text(encoding="utf-8").splitlines():
+            try:
+                n += json.loads(line).get("date", "")[:10] == today
+            except ValueError:
+                pass
+    return n
+
+
 def main():
+    off = CFG.get("off_file")
+    if off and (ROOT / off).exists():
+        log(f"  switched off ({off} exists): nothing queued. {(ROOT / off).read_text(encoding='utf-8')[:300]}")
+        return
     seen = json.loads(SEEN_F.read_text()) if SEEN_F.exists() else {}
     seen = {k: t for k, t in seen.items() if NOW - t < 21 * 86400}
     posted = set()
@@ -242,6 +270,12 @@ def main():
     left = posts_left()
     room = 10**6 if left is None else max(0, left - CFG.get("ig_keep_free", 2))
     log(f"  Instagram posts left today: {left if left is not None else 'unknown'}; room for {min(room, 999)}")
+    if CFG.get("daily_cap"):
+        done = shipped_today()
+        room = min(room, max(0, CFG["daily_cap"] - done))
+        log(f"  daily cap {CFG['daily_cap']}: {done} shipped today, room for {room}")
+    if CFG.get("per_run"):
+        room = min(room, CFG["per_run"])
     pending = []
     if PENDING_F.exists():
         for line in PENDING_F.read_text(encoding="utf-8").splitlines():
@@ -263,7 +297,7 @@ def main():
         else:
             seen.pop(c["key"], None)
             log(f"  hold {c['url']} (Instagram daily limit, next run)")
-    SEEN_F.parent.mkdir(exist_ok=True)
+    SEEN_F.parent.mkdir(parents=True, exist_ok=True)
     SEEN_F.write_text(json.dumps(seen, indent=0, sort_keys=True))
     for url, mode in out:
         print(f"{url}\t{mode}")
