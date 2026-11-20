@@ -34,8 +34,9 @@ jobs:
       - name: Tools
         run: |
           bash cloud/install_media_tools.sh
-          curl -fsSL -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i /tmp/cloudflared.deb >/dev/null
+          # plain binary, not dpkg: WARP's background install holds the dpkg lock while this step runs
+          sudo curl -fsSL --retry 3 -o /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo chmod +x /usr/local/bin/cloudflared
           pip install -q -U "yt-dlp[default]" bgutil-ytdlp-pot-provider faster-whisper opencv-python-headless pillow numpy scenedetect
           # PO token server for YouTube's "Sign in to confirm you're not a bot" check on cloud IPs (yt-dlp plugin above)
           docker run -d --name bgutil -p 4416:4416 --init brainicism/bgutil-ytdlp-pot-provider >/dev/null || echo "::warning::PO token server did not start"
