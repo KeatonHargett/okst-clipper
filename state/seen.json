@@ -1290,5 +1290,15 @@
   "kind": "interview",
   "day": "2026-11-20",
   "queued": false
+ },
+ "2I6JIpbR2xA": {
+  "title": "David Taylor post Arizona State — Nov. 20, 2026",
+  "source": "pistolsfiring",
+  "channel": "Pistols Firing",
+  "person": "taylor",
+  "kind": "interview",
+  "day": "2026-11-20",
+  "queued": true,
+  "queued_on": "2026-11-20"
  }
 }
